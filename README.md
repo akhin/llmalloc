@@ -43,7 +43,7 @@ On Linux, you can also LD_PRELOAD :
 ```bash
 # Getting and building the shared object
 git clone https://github.com/akhin/llmalloc.git
-cd linux_ld_preload_so
+cd llmalloc/linux_ld_preload_so
 chmod +x build.sh
 ./build.sh
 # Using it
