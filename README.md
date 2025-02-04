@@ -13,7 +13,7 @@ llmalloc is a low latency oriented thread caching allocator :
 - Can be pinned to a specified NUMA node ( Linux only , requires libnuma )
 - Repo also provides [memlive](https://github.com/akhin/llmalloc/tree/main/memlive) : single header & no deps per-thread profiler to monitor allocations in your browser
 - 64 bit only
-- C++17 , GCC and MSVC ( tested on GCC 11.4.1, GCC 9.4.0, MSVC2022)
+- C++17 , GCC and MSVC ( tested on GCC 11.4.1, GCC 9.4.0, MSVC2022 )
 
 * [Usage](#usage)
 * [Benchmarks](#benchmarks)
