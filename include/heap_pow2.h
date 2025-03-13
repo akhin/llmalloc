@@ -74,8 +74,8 @@ class HeapPow2
             double segment_grow_coefficient = 2.0;
             // DEALLOCATION QUEUES
             std::size_t deallocation_queues_processing_threshold = 1024;
-            std::size_t recyclable_deallocation_queue_size = 65536;
-            std::size_t non_recyclable_deallocation_queue_size = 65536;
+            std::size_t recyclable_deallocation_queue_sizes[BIN_COUNT] = { 65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536 };
+            std::size_t non_recyclable_deallocation_queue_sizes[BIN_COUNT] = { 65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536 };
         };
 
         [[nodiscard]] bool create(const HeapCreationParams& params, ArenaType* arena)
@@ -185,15 +185,15 @@ class HeapPow2
 
             for (std::size_t i = 0; i < BIN_COUNT; i++)
             {
-                if(params.non_recyclable_deallocation_queue_size > 0)
+                if( params.non_recyclable_deallocation_queue_sizes[i] > 0 )
                 {
-                    if (m_non_recyclable_deallocation_queues[i].create(params.non_recyclable_deallocation_queue_size) == false)
+                    if (m_non_recyclable_deallocation_queues[i].create(params.non_recyclable_deallocation_queue_sizes[i]) == false)
                     {
                         return false;
                     }
                 }
-                
-                if (m_recyclable_deallocation_queues[i].create(params.recyclable_deallocation_queue_size) == false)
+
+                if (m_recyclable_deallocation_queues[i].create(params.recyclable_deallocation_queue_sizes[i]) == false)
                 {
                     return false;
                 }

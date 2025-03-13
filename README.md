@@ -1,6 +1,6 @@
 ## <a name="intro"></a>**llmalloc**  
 
-Latest version: 1.0.0
+Latest version: 1.0.1
 
 llmalloc is a low latency oriented thread caching allocator :
 
@@ -173,6 +173,7 @@ Repo also provides Memlive which is a single header no deps per thread live prof
 
 ## <a name="version_history"></a>Version history
 
+- 1.0.1 : Deallocation queue sizes are now configurable per size class.
 - 1.0.0 : Initial version 
 
 ## <a name="references"></a>References

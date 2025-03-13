@@ -42,7 +42,7 @@ struct SingleThreadedAllocatorOptions
     double grow_coefficient = 2;
     // DEALLOCATION QUEUES
     std::size_t deallocation_queue_processing_threshold = 409600;
-    std::size_t deallocation_queue_size = 65536;
+    std::size_t deallocation_queue_sizes[HeapPow2<>::BIN_COUNT] = { 65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536 };
     // OTHERS
     bool use_huge_pages = false;
     int numa_node = -1;
@@ -77,17 +77,18 @@ class SingleThreadedAllocator
 
             typename HeapType::HeapCreationParams heap_params;
             heap_params.segments_can_grow = true;
-            heap_params.non_recyclable_deallocation_queue_size = 0;
 
             heap_params.page_recycling_threshold_per_size_class = options.page_recycling_threshold;
             heap_params.segment_grow_coefficient = options.grow_coefficient;
 
             heap_params.deallocation_queues_processing_threshold = options.deallocation_queue_processing_threshold;
-            heap_params.recyclable_deallocation_queue_size = options.deallocation_queue_size;
-
+            
+            
             for (std::size_t i = 0; i < HeapPow2<>::BIN_COUNT; i++)
             {
                 heap_params.logical_page_counts[i] = options.logical_page_counts_per_size_class[i];
+                heap_params.non_recyclable_deallocation_queue_sizes[i] = 0;
+                heap_params.recyclable_deallocation_queue_sizes[i] = options.deallocation_queue_sizes[i];
             }
 
             ArenaOptions arena_options;

@@ -10,7 +10,7 @@ namespace=llmalloc
 ####################################################
 [HEADER]
 /*
-    LLMALLOC VERSION 1.0.0
+    LLMALLOC VERSION 1.0.1
 
     MIT License
 

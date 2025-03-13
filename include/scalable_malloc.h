@@ -40,8 +40,8 @@ struct ScalableMallocOptions
     double grow_coefficient = 2.0;
     // DEALLOCATION QUEUES
     std::size_t deallocation_queues_processing_threshold = 409600;
-    std::size_t recyclable_deallocation_queue_size = 65536;
-    std::size_t non_recyclable_deallocation_queue_size = 65536;
+    std::size_t recyclable_deallocation_queue_sizes[HeapPow2<>::BIN_COUNT] = {65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536};
+    std::size_t non_recyclable_deallocation_queue_sizes[HeapPow2<>::BIN_COUNT] = {65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536};
     // OTHERS
     bool use_huge_pages = false;
     int numa_node=-1;
@@ -66,9 +66,10 @@ struct ScalableMallocOptions
         
         // DEALLOCATION QUEUES
         deallocation_queues_processing_threshold = EnvironmentVariable::get_variable("llmalloc_deallocation_queues_processing_threshold", deallocation_queues_processing_threshold);
-        recyclable_deallocation_queue_size = EnvironmentVariable::get_variable("llmalloc_recyclable_deallocation_queue_size", recyclable_deallocation_queue_size);
-        non_recyclable_deallocation_queue_size = EnvironmentVariable::get_variable("llmalloc_non_recyclable_deallocation_queue_size", non_recyclable_deallocation_queue_size);
-
+        
+        EnvironmentVariable::set_numeric_array_from_comma_separated_value_string(recyclable_deallocation_queue_sizes, HeapPow2<>::BIN_COUNT, EnvironmentVariable::get_variable("llmalloc_recyclable_deallocation_queue_sizes", "65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536"));
+        EnvironmentVariable::set_numeric_array_from_comma_separated_value_string(non_recyclable_deallocation_queue_sizes, HeapPow2<>::BIN_COUNT, EnvironmentVariable::get_variable("llmalloc_non_recyclable_deallocation_queue_sizes", "65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536,65536"));
+        
         // OTHERS
         thread_local_cached_heap_count = EnvironmentVariable::get_variable("llmalloc_thread_local_cached_heap_count", thread_local_cached_heap_count);
 
@@ -125,12 +126,12 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
             local_heap_params.segments_can_grow = options.local_heaps_can_grow;
             local_heap_params.segment_grow_coefficient = options.grow_coefficient;
             local_heap_params.deallocation_queues_processing_threshold = options.deallocation_queues_processing_threshold;
-            local_heap_params.recyclable_deallocation_queue_size = options.recyclable_deallocation_queue_size;
-            local_heap_params.non_recyclable_deallocation_queue_size = options.non_recyclable_deallocation_queue_size;
 
             for (std::size_t i = 0; i < HeapPow2<>::BIN_COUNT; i++)
             {
                 local_heap_params.logical_page_counts[i] = options.local_logical_page_counts_per_size_class[i];
+                local_heap_params.recyclable_deallocation_queue_sizes[i] = options.recyclable_deallocation_queue_sizes[i];
+                local_heap_params.non_recyclable_deallocation_queue_sizes[i] = options.non_recyclable_deallocation_queue_sizes[i];
             }
 
             typename CentralHeapType::HeapCreationParams central_heap_params;
@@ -138,12 +139,12 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
             central_heap_params.segments_can_grow = true;
             central_heap_params.segment_grow_coefficient = options.grow_coefficient;
             central_heap_params.deallocation_queues_processing_threshold = options.deallocation_queues_processing_threshold;
-            central_heap_params.recyclable_deallocation_queue_size = options.recyclable_deallocation_queue_size;
-            central_heap_params.non_recyclable_deallocation_queue_size = options.non_recyclable_deallocation_queue_size;
 
             for (std::size_t i = 0; i < HeapPow2<>::BIN_COUNT; i++)
             {
                 central_heap_params.logical_page_counts[i] = options.central_logical_page_counts_per_size_class[i];
+                central_heap_params.recyclable_deallocation_queue_sizes[i] = options.recyclable_deallocation_queue_sizes[i];
+                central_heap_params.non_recyclable_deallocation_queue_sizes[i] = options.non_recyclable_deallocation_queue_sizes[i];
             }
 
             ArenaOptions arena_options;
