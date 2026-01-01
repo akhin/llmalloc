@@ -27,7 +27,7 @@ public:
 
     static void deallocate(void* ptr, std::size_t size)
     {
-        UNUSED(size);
+        LLMALLOC_UNUSED(size);
         #ifdef __linux__
         free(ptr);
         #elif _WIN32    

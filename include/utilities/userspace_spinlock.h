@@ -19,8 +19,7 @@
 
     Doesn`t check against uniprocessors.
 */
-#ifndef _USERSPACE_SPINLOCK_H_
-#define _USERSPACE_SPINLOCK_H_
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -36,7 +35,7 @@ template<std::size_t alignment=sizeof(uint32_t), std::size_t spin_count = 1024, 
 struct UserspaceSpinlock
 {
     // No privates, ctors or dtors to stay as PACKED+POD
-    ALIGN_DATA(alignment) uint32_t m_flag=0;
+    LLMALLOC_ALIGN_DATA(alignment) uint32_t m_flag=0;
 
     void initialise()
     {
@@ -64,9 +63,9 @@ struct UserspaceSpinlock
         }
     }
 
-    FORCE_INLINE bool try_lock()
+    LLMALLOC_FORCE_INLINE bool try_lock()
     {
-        if (builtin_cas(&m_flag, 0, 1) == 1)
+        if (llmalloc_builtin_cas(&m_flag, 0, 1) == 1)
         {
             return false;
         }
@@ -74,11 +73,8 @@ struct UserspaceSpinlock
         return true;
     }
 
-    FORCE_INLINE void unlock()
+    LLMALLOC_FORCE_INLINE void unlock()
     {
         m_flag = 0;
     }
 };
-
-
-#endif

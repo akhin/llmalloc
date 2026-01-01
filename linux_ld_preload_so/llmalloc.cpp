@@ -108,7 +108,7 @@ char *strdup(const char *s)
 
     if (new_str != nullptr)
     {
-        builtin_memcpy(new_str, s, size);
+        llmalloc_builtin_memcpy(new_str, s, size);
         new_str[size] = '\0';
     }
 
@@ -126,7 +126,7 @@ char *strndup(const char *s, size_t n)
 
     if (new_str != nullptr)
     {
-        builtin_memcpy(new_str, s, size);
+        llmalloc_builtin_memcpy(new_str, s, size);
         new_str[size] = '\0';
     }
 
@@ -460,7 +460,7 @@ void* operator new(std::size_t size, std::align_val_t alignment)
 void operator delete(void* ptr, std::align_val_t alignment) noexcept
 {
     initialise_shared_object();
-    UNUSED(alignment);
+    LLMALLOC_UNUSED(alignment);
     ScalableAllocatorType::get_instance().deallocate(ptr);
 }
 
@@ -473,7 +473,7 @@ void* operator new[](std::size_t size, std::align_val_t alignment)
 void operator delete[](void* ptr, std::align_val_t alignment) noexcept
 {
     initialise_shared_object();
-    UNUSED(alignment);
+    LLMALLOC_UNUSED(alignment);
     ScalableAllocatorType::get_instance().deallocate(ptr);
 }
 
@@ -559,45 +559,45 @@ void operator delete[](void* ptr, std::size_t, const std::nothrow_t &) noexcept
 void operator delete(void* ptr, std::size_t size) noexcept
 {
     initialise_shared_object();
-    UNUSED(size);
+    LLMALLOC_UNUSED(size);
     ScalableAllocatorType::get_instance().deallocate(ptr);
 }
 
 void operator delete[](void* ptr, std::size_t size) noexcept
 {
     initialise_shared_object();
-    UNUSED(size);
+    LLMALLOC_UNUSED(size);
     ScalableAllocatorType::get_instance().deallocate(ptr);
 }
 
 void operator delete(void* ptr, std::size_t size, std::align_val_t align) noexcept
 {
     initialise_shared_object();
-    UNUSED(size);
-    UNUSED(align);
+    LLMALLOC_UNUSED(size);
+    LLMALLOC_UNUSED(align);
     ScalableAllocatorType::get_instance().deallocate(ptr);
 }
 
 void operator delete[](void* ptr, std::size_t size, std::align_val_t align) noexcept
 {
     initialise_shared_object();
-    UNUSED(size);
-    UNUSED(align);
+    LLMALLOC_UNUSED(size);
+    LLMALLOC_UNUSED(align);
     ScalableAllocatorType::get_instance().deallocate(ptr);
 }
 
 void operator delete(void* ptr, std::size_t size, std::size_t align) noexcept
 {
     initialise_shared_object();
-    UNUSED(size);
-    UNUSED(align);
+    LLMALLOC_UNUSED(size);
+    LLMALLOC_UNUSED(align);
     ScalableAllocatorType::get_instance().deallocate(ptr);
 }
 
 void operator delete[](void* ptr, std::size_t size, std::size_t align) noexcept
 {
     initialise_shared_object();
-    UNUSED(size);
-    UNUSED(align);
+    LLMALLOC_UNUSED(size);
+    LLMALLOC_UNUSED(align);
     ScalableAllocatorType::get_instance().deallocate(ptr);
 }

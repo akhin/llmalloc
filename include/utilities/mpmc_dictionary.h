@@ -17,8 +17,7 @@
 
     - DEFAULT HASH FUNCTION : MurmurHash3 https://en.wikipedia.org/wiki/MurmurHash
 */
-#ifndef _MPMC_DICTIONARY_H_
-#define _MPMC_DICTIONARY_H_
+#pragma once
 
 #include <atomic>
 #include <array>
@@ -101,7 +100,7 @@ class MPMCDictionary
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             if (m_node_cache_index >= m_node_cache_capacity)
             {
-                if (unlikely(build_node_cache() == false))
+                if (llmalloc_unlikely(build_node_cache() == false))
                 {
                     m_insertion_lock.unlock();
                     return false;
@@ -150,7 +149,7 @@ class MPMCDictionary
         }
 
     private:
-        ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) std::atomic<DictionaryNode*>* m_table = nullptr;
+        LLMALLOC_ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) std::atomic<DictionaryNode*>* m_table = nullptr;
         std::size_t m_table_size = 0;
 
         HashFunction m_hash;
@@ -173,7 +172,7 @@ class MPMCDictionary
             for (std::size_t i = 0; i < m_node_cache_capacity; i++)
             {
                 DictionaryNode* new_node = new (new_node_cache + i) DictionaryNode(); // Placement new
-                UNUSED(new_node);
+                LLMALLOC_UNUSED(new_node);
             }
             
             m_node_cache = new_node_cache;
@@ -181,12 +180,10 @@ class MPMCDictionary
             return true;
         }
 
-        FORCE_INLINE std::size_t hash(const Key& key) const
+        LLMALLOC_FORCE_INLINE std::size_t hash(const Key& key) const
         {
             auto hash_value = m_hash(key);
             auto result = hash_value - (hash_value / m_table_size) * m_table_size;
             return result;
         }
 };
-
-#endif

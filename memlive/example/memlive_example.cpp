@@ -38,7 +38,7 @@ int main()
         return -1;
     }
 
-    cout << "In your browser , navigate to localhost:" << port << endl;
+    cout << "In your browser , navigate to http://localhost:" << port << endl;
 
     //////////////////////////////////////////////////////////////////////
     // SETUP AND RUN THREADS

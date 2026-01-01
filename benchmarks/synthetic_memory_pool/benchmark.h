@@ -63,7 +63,7 @@ void run_multithreaded_benchmark(int argc, char* argv[], std::string title, Allo
     Stopwatch<StopwatchType::STOPWATCH_WITH_RDTSCP> stopwatch_duration;
 
     auto cpu_frequency = ProcessorUtilities::get_current_cpu_frequency_hertz();
-    Console::console_output_with_colour(ConsoleColour::FG_YELLOW, "Current CPU frequency ( not min or max ) : " + std::to_string(cpu_frequency) + " Hz\n");
+    Console::print_colour(ConsoleColour::FG_YELLOW, "Current CPU frequency ( not min or max ) : " + std::to_string(cpu_frequency) + " Hz\n");
 
     Stopwatch<StopwatchType::STOPWATCH_WITH_RDTSCP> stopwatch;
     Statistics<double> reports_allocs[MAX_THREAD_COUNT];
@@ -84,7 +84,7 @@ void run_multithreaded_benchmark(int argc, char* argv[], std::string title, Allo
                 }
             }
         
-            Console::console_output_with_colour(ConsoleColour::FG_YELLOW, "Sampling starting\n");
+            Console::print_colour(ConsoleColour::FG_YELLOW, "Sampling starting\n");
             std::size_t allocation_index = 0;
 
             stopwatch_duration.start();            
@@ -111,7 +111,7 @@ void run_multithreaded_benchmark(int argc, char* argv[], std::string title, Allo
                     }
 
                     #ifdef ENABLE_READS_AND_WRITES
-                    if (!do_reads_writes_on_buffer(ptr, sizeof(Foo))) { Console::console_output_with_colour(ConsoleColour::FG_RED, "ALLOCATION FAILED !!!\n"); }
+                    if (!do_reads_writes_on_buffer(ptr, sizeof(Foo))) { Console::print_colour(ConsoleColour::FG_RED, "ALLOCATION FAILED !!!\n"); }
                     #endif
 
                     allocation_buckets[allocation_bucket_index][allocation_index].ptr = ptr;
@@ -180,7 +180,7 @@ void run_multithreaded_benchmark(int argc, char* argv[], std::string title, Allo
             {
                 if (allocation.allocated == false || allocation.deallocated == false)
                 {
-                    Console::console_output_with_colour(ConsoleColour::FG_RED, "TEST FAILED !!!\n");
+                    Console::print_colour(ConsoleColour::FG_RED, "TEST FAILED !!!\n");
                 }
             }
         }
@@ -199,10 +199,10 @@ void run_multithreaded_benchmark(int argc, char* argv[], std::string title, Allo
         reports_deallocs[i].print("Deallocations , thread" + std::to_string(i)  + " : " + title, "clock cycles");
     }
     */
-    Console::console_output_with_colour(ConsoleColour::FG_BLUE, "Clock cycles : " + std::to_string(stopwatch_duration.get_elapsed_cycles() ) + "\n");
-    Console::console_output_with_colour(ConsoleColour::FG_BLUE, "Number of threads : " + std::to_string(thread_count) + "\n");
-    Console::console_output_with_colour(ConsoleColour::FG_BLUE, "Number of allocs and frees per thread : " + std::to_string(ALLOCATION_COUNT_PER_THREAD) + "\n");
-    Console::console_output_with_colour(ConsoleColour::FG_BLUE, "Interleave count : " + std::to_string(INTERLEAVE_COUNT) + "\n");
+    Console::print_colour(ConsoleColour::FG_BLUE, "Clock cycles : " + std::to_string(stopwatch_duration.get_elapsed_cycles() ) + "\n");
+    Console::print_colour(ConsoleColour::FG_BLUE, "Number of threads : " + std::to_string(thread_count) + "\n");
+    Console::print_colour(ConsoleColour::FG_BLUE, "Number of allocs and frees per thread : " + std::to_string(ALLOCATION_COUNT_PER_THREAD) + "\n");
+    Console::print_colour(ConsoleColour::FG_BLUE, "Interleave count : " + std::to_string(INTERLEAVE_COUNT) + "\n");
     
     std::ofstream outfile("samples.txt", std::ios_base::app);
     outfile << stopwatch_duration.get_elapsed_cycles() << std::endl;

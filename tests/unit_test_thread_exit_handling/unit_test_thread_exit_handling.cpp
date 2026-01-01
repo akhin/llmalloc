@@ -40,7 +40,7 @@ int main(int argc, char* argv[])
     auto thread_function = [&](unsigned int cpu_id)
     {
         auto ptr = AllocatorType::get_instance().allocate(5);
-        UNUSED(ptr);
+        LLMALLOC_UNUSED(ptr);
     };
 
     auto central_heap = AllocatorType::get_instance().get_central_heap();

@@ -1,8 +1,7 @@
 /*
     REFERENCE : THIS CODE IS A COSMETICALLY MODIFIED VERSION OF ERIK RIGTORP'S IMPLEMENTATION : https://github.com/rigtorp/MPMCQueue/ ( MIT Licence )
 */
-#ifndef _MPMC_BOUNDED_QUEUE_H_
-#define _MPMC_BOUNDED_QUEUE_H_
+#pragma once
 
 #include "../compiler/hints_hot_code.h"
 #include "../cpu/alignment_constants.h"
@@ -34,7 +33,7 @@ template <typename T> struct Slot
 
     T&& move() { return reinterpret_cast<T&&>(storage); }
 
-    ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) std::atomic<std::size_t> turn = { 0 };
+    LLMALLOC_ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) std::atomic<std::size_t> turn = { 0 };
     typename std::aligned_storage<sizeof(T), alignof(T)>::type storage;
 };
 
@@ -175,19 +174,17 @@ public:
     }
 
 private:
-    FORCE_INLINE std::size_t modulo_capacity(std::size_t input) const
+    LLMALLOC_FORCE_INLINE std::size_t modulo_capacity(std::size_t input) const
     {
         assert(m_capacity > 0);
         return input - (input / m_capacity) * m_capacity;
     }
 
-    FORCE_INLINE std::size_t turn(std::size_t i) const { return i / m_capacity; }
+    LLMALLOC_FORCE_INLINE std::size_t turn(std::size_t i) const { return i / m_capacity; }
 
     std::size_t m_capacity = 0;
     Slot<T>* m_slots = nullptr;
 
-    ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) std::atomic<std::size_t> m_head = 0;
-    ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) std::atomic<std::size_t> m_tail = 0;
+    LLMALLOC_ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) std::atomic<std::size_t> m_head = 0;
+    LLMALLOC_ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) std::atomic<std::size_t> m_tail = 0;
 };
-
-#endif

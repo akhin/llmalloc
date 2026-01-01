@@ -1,5 +1,4 @@
-#ifndef _HEAP_POOL_H_
-#define _HEAP_POOL_H_
+#pragma once
 
 #include <cstdint>
 #include <cstddef>
@@ -53,16 +52,16 @@ class HeapPool
 
         [[nodiscard]] bool create(const HeapCreationParams& params, ArenaType* arena_ptr)
         {
-            assert_msg(params.size_class > 0, "Pool size class should be greater than zero.");
-            assert_msg(params.initial_size > 0, "Pool initial size should be greater than zero.");
-            assert_msg(params.initial_size % params.logical_page_size == 0, "Initial pool size should be a multiple of its logical page size.");
+            llmalloc_assert_msg(params.size_class > 0, "Pool size class should be greater than zero.");
+            llmalloc_assert_msg(params.initial_size > 0, "Pool initial size should be greater than zero.");
+            llmalloc_assert_msg(params.initial_size % params.logical_page_size == 0, "Initial pool size should be a multiple of its logical page size.");
 
             m_arena = arena_ptr;
 
             auto buffer_length = params.initial_size;
             auto buffer_address = reinterpret_cast<uint64_t>(m_arena->allocate(buffer_length));
 
-            assert_msg(AlignmentAndSizeUtils::is_address_page_allocation_granularity_aligned(reinterpret_cast<void*>(buffer_address)), "Arena failed to return page alloc granularity aligned address for memory pool.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_page_allocation_granularity_aligned(reinterpret_cast<void*>(buffer_address)), "Arena failed to return page alloc granularity aligned address for memory pool.");
             
             std::size_t segment_size = static_cast<std::size_t>(buffer_length);
             std::size_t logical_page_count_per_segment = static_cast<std::size_t>(segment_size / params.logical_page_size);
@@ -96,14 +95,14 @@ class HeapPool
             return true;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate(std::size_t size = 0)
         {
-            UNUSED(size);
+            LLMALLOC_UNUSED(size);
 
             m_potential_pending_max_deallocation_count++;
 
-            if(unlikely(m_potential_pending_max_deallocation_count.load() >= m_deallocation_queue_processing_threshold ))
+            if(llmalloc_unlikely(m_potential_pending_max_deallocation_count.load() >= m_deallocation_queue_processing_threshold ))
             {
                 return allocate_by_processing_deallocation_queue(size);
             }
@@ -124,7 +123,7 @@ class HeapPool
         }
 
         // Slow path removal function
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate_by_processing_deallocation_queue(std::size_t size)
         {
             #ifdef ENABLE_PERF_TRACES
@@ -150,10 +149,10 @@ class HeapPool
             return m_segment.allocate(size);
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         bool deallocate(void* ptr, bool is_small_object = false)
         {
-            UNUSED(is_small_object);
+            LLMALLOC_UNUSED(is_small_object);
 
             if(m_segment.owns_pointer(ptr))
             {
@@ -173,7 +172,7 @@ class HeapPool
 
         SegmentType* get_segment(std::size_t bin_index)
         {
-            assert_msg(bin_index>0, "HeapPool holds only a single segment.");
+            llmalloc_assert_msg(bin_index>0, "HeapPool holds only a single segment.");
             return &m_segment;
         }
 
@@ -199,7 +198,7 @@ class HeapPool
 
                 if (m_recyclable_deallocation_queue.try_pop(pointer))
                 {
-                    if (likely(ret != nullptr))
+                    if (llmalloc_likely(ret != nullptr))
                     {
                         m_segment.deallocate(reinterpret_cast<void*>(pointer));
                     }
@@ -217,5 +216,3 @@ class HeapPool
             return ret;
         }
 };
-
-#endif

@@ -1,5 +1,4 @@
-#ifndef _ENVIRONMENT_VARIABLE_H_
-#define _ENVIRONMENT_VARIABLE_H_
+#pragma once
 
 #include <cstddef>
 #include <cctype>
@@ -132,5 +131,3 @@ class EnvironmentVariable
             }
         }
 };
-
-#endif

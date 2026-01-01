@@ -9,7 +9,6 @@ INCLUDE_DIRS = -I../
 OBJECTS = $(SOURCES:.cpp=.o)
 #Executable
 EXECUTABLE = ./memlive_example
-MISSED_REPORT = ./missed.all
 #Compiler flags
 CFLAGS= $(INCLUDE_DIRS) -std=c++17 -c 
 #Linker flags
@@ -38,7 +37,7 @@ debug_with_ubsan: LFLAGS += -Wall -Wl,-z,defs -fsanitize=undefined -unresolved-s
 debug_with_ubsan: all
 
 #Release mode
-release: CFLAGS += -DNDEBUG -O3 -fopt-info-missed=missed.all -fno-rtti
+release: CFLAGS += -DNDEBUG -O3 -fno-rtti
 release: all
 all: $(OBJECTS) $(EXECUTABLE)
 
@@ -50,7 +49,7 @@ $(EXECUTABLE) : $(OBJECTS)
 
 clean:
 	@echo Cleaning
-	-rm -f $(OBJECTS) $(EXECUTABLE) $(MISSED_REPORT)
+	-rm -f $(OBJECTS) $(EXECUTABLE)
 	@echo Cleaning done
 	
 .PHONY: all clean

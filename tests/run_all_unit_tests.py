@@ -19,7 +19,7 @@ class Utility:
         if Utility.is_valid_file(file_name):
             ret = open(file_name, 'r').read()
         return ret
-        
+
     @staticmethod
     def is_valid_file(file_path):
         return os.path.isfile(file_path)
@@ -75,6 +75,14 @@ def perform_single_unit_test(unit_test_path):
     # 3. RUN WITH >> result.txt
     full_path = Path(unit_test_path)
     executable_command = full_path.name
+
+    if _platform == "win32":
+        if not os.path.isfile(executable_command+ ".exe"):
+            executable_command = 'unit_test'
+    elif _platform == "linux" or _platform == "linux2":
+        if not os.path.isfile(executable_command):
+            executable_command = 'unit_test'
+
     if _platform == "win32":
         executable_command = executable_command + ".exe no_pause"
     elif _platform == "linux" or _platform == "linux2":

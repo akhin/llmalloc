@@ -1,5 +1,4 @@
-#ifndef _PACKED_H_
-#define _PACKED_H_
+#pragma once
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // PACKED
@@ -10,9 +9,7 @@
 // Compilers won`t add additional padding zeroes for "packed" data structures
 
 #ifdef __GNUC__
-#define PACKED( __Declaration__ ) __Declaration__ __attribute__((__packed__))
+#define LLMALLOC_PACKED( __Declaration__ ) __Declaration__ __attribute__((__packed__))
 #elif _MSC_VER
-#define PACKED( __Declaration__ ) __pragma( pack(push, 1) ) __Declaration__ __pragma( pack(pop))
-#endif
-
+#define LLMALLOC_PACKED( __Declaration__ ) __pragma( pack(push, 1) ) __Declaration__ __pragma( pack(pop))
 #endif

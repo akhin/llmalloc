@@ -1,18 +1,18 @@
 @echo off
 
-REM Change vars accordingly to your MSVC installation
-set "VS_PATH=C:\Program Files\Microsoft Visual Studio"
-set "VS_VERSION=2022"
-set "VS_EDITION=Community"
+:: Use vswhere to find the latest installed Visual Studio
+for /f "usebackq tokens=*" %%a in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
+    set "VS_INSTALL_DIR=%%a"
+)
 
-if not exist "%VS_PATH%\%VS_VERSION%\%VS_EDITION%\VC\Auxiliary\Build\vcvarsall.bat" (
-    echo Can't find VS%VS_VERSION% command prompt in %VS_PATH%.
-    echo Please check your VS installation and update the script accordingly.
-    pause
+:: Check if the variable was set
+if not defined VS_INSTALL_DIR (
+    echo Visual Studio installation not found.
     exit /b 1
 )
 
-call "%VS_PATH%\%VS_VERSION%\%VS_EDITION%\VC\Auxiliary\Build\vcvarsall.bat" x64
+:: Call the developer command prompt
+call "%VS_INSTALL_DIR%\Common7\Tools\VsDevCmd.bat" -arch=x64
 
 set "TRANSLATION_UNIT_NAME=unit_test_mpmc_dictionary"
 

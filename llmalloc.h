@@ -1,9 +1,9 @@
 /*
-LLMALLOC VERSION 1.0.1
+LLMALLOC VERSION 1.0.2
 
 MIT License
 
-Copyright (c) 2025 Akin Ocal
+Copyright (c) 2026 Akin Ocal
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -105,17 +105,16 @@ namespace llmalloc
 // C++ VERSION CHECK
 #if defined(_MSC_VER)
 #if _MSVC_LANG < 201703L
-#error "This library requires to be compiled with C++17"
+#error "This library requires to be compiled with at least C++17"
 #endif
 #elif defined(__GNUC__)
 #if __cplusplus < 201703L
-#error "This library requires to be compiled with C++17"
+#error "This library requires to be compiled with at least C++17"
 #endif
 #endif
 
 //////////////////////////////////////////////////////////////////////
 // ARCHITECTURE CHECK
-
 #if defined(_MSC_VER)
 #if (! defined(_M_X64))
 #error "This library is supported for only x86-x64 architectures"
@@ -128,7 +127,6 @@ namespace llmalloc
 
 //////////////////////////////////////////////////////////////////////
 // OPERATING SYSTEM CHECK
-
 #if (! defined(__linux__)) && (! defined(_WIN32) )
 #error "This library is supported for Linux and Windows systems"
 #endif
@@ -136,10 +134,10 @@ namespace llmalloc
 //////////////////////////////////////////////////////////////////////
 // Count leading zeroes
 #if defined(__GNUC__)
-#define builtin_clzl(n)     __builtin_clzl(n)
+#define llmalloc_builtin_clzl(n)     __builtin_clzl(n)
 #elif defined(_MSC_VER)
 #if defined(_WIN64)    // Implementation is for 64-bit only.
-inline int builtin_clzl(unsigned long value)
+inline int llmalloc_builtin_clzl(unsigned long value)
 {
     unsigned long index = 0;
     return _BitScanReverse64(&index, static_cast<unsigned __int64>(value)) ? static_cast<int>(63 - index) : 64;
@@ -153,35 +151,35 @@ inline int builtin_clzl(unsigned long value)
 // Compare and swap, standard C++ provides them however it requires non-POD std::atomic usage
 // They are needed when we want to embed spinlocks in "packed" data structures which need all members to be POD such as headers
 #if defined(__GNUC__)
-#define builtin_cas(pointer, old_value, new_value) __sync_val_compare_and_swap(pointer, old_value, new_value)
+#define llmalloc_builtin_cas(pointer, old_value, new_value) __sync_val_compare_and_swap(pointer, old_value, new_value)
 #elif defined(_MSC_VER)
-#define builtin_cas(pointer, old_value, new_value) _InterlockedCompareExchange(reinterpret_cast<long*>(pointer), new_value, old_value)
+#define llmalloc_builtin_cas(pointer, old_value, new_value) _InterlockedCompareExchange(reinterpret_cast<long*>(pointer), new_value, old_value)
 #endif
 
 //////////////////////////////////////////////////////////////////////
 // memcpy
 #if defined(__GNUC__)
-#define builtin_memcpy(destination, source, size)     __builtin_memcpy(destination, source, size)
+#define llmalloc_builtin_memcpy(destination, source, size)     __builtin_memcpy(destination, source, size)
 #elif defined(_MSC_VER)
-#define builtin_memcpy(destination, source, size)     std::memcpy(destination, source, size)
+#define llmalloc_builtin_memcpy(destination, source, size)     std::memcpy(destination, source, size)
 #endif
 
 //////////////////////////////////////////////////////////////////////
 // memset
 #if defined(__GNUC__)
-#define builtin_memset(destination, character, count)  __builtin_memset(destination, character, count)
+#define llmalloc_builtin_memset(destination, character, count)  __builtin_memset(destination, character, count)
 #elif defined(_MSC_VER)
-#define builtin_memset(destination, character, count)  std::memset(destination, character, count)
+#define llmalloc_builtin_memset(destination, character, count)  std::memset(destination, character, count)
 #endif
 
 //////////////////////////////////////////////////////////////////////
 // aligned_alloc , It exists because MSVC does not provide std::aligned_alloc
 #if defined(__GNUC__)
-#define builtin_aligned_alloc(size, alignment)  std::aligned_alloc(alignment, size)
-#define builtin_aligned_free(ptr)               std::free(ptr)
+#define llmalloc_builtin_aligned_alloc(size, alignment)  std::aligned_alloc(alignment, size)
+#define llmalloc_builtin_aligned_free(ptr)               std::free(ptr)
 #elif defined(_MSC_VER)
-#define builtin_aligned_alloc(size, alignment)  _aligned_malloc(size, alignment)
-#define builtin_aligned_free(ptr)               _aligned_free(ptr)
+#define llmalloc_builtin_aligned_alloc(size, alignment)  _aligned_malloc(size, alignment)
+#define llmalloc_builtin_aligned_free(ptr)               _aligned_free(ptr)
 #endif
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -189,9 +187,9 @@ inline int builtin_clzl(unsigned long value)
 #if defined(_MSC_VER)
 //No implementation provided for MSVC for pre C++20 :
 //https://social.msdn.microsoft.com/Forums/vstudio/en-US/2dbdca4d-c0c0-40a3-993b-dc78817be26e/branch-hints?forum=vclanguage
-#define likely(x) x
+#define llmalloc_likely(x) x
 #elif defined(__GNUC__)
-#define likely(x)      __builtin_expect(!!(x), 1)
+#define llmalloc_likely(x)      __builtin_expect(!!(x), 1)
 #endif
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -199,34 +197,34 @@ inline int builtin_clzl(unsigned long value)
 #if defined(_MSC_VER)
 //No implementation provided for MSVC for pre C++20 :
 //https://social.msdn.microsoft.com/Forums/vstudio/en-US/2dbdca4d-c0c0-40a3-993b-dc78817be26e/branch-hints?forum=vclanguage
-#define unlikely(x) x
+#define llmalloc_unlikely(x) x
 #elif defined(__GNUC__)
-#define unlikely(x)    __builtin_expect(!!(x), 0)
+#define llmalloc_unlikely(x)    __builtin_expect(!!(x), 0)
 #endif
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // FORCE_INLINE
 #if defined(_MSC_VER)
-#define FORCE_INLINE __forceinline
+#define LLMALLOC_FORCE_INLINE __forceinline
 #elif defined(__GNUC__)
-#define FORCE_INLINE __attribute__((always_inline))
+#define LLMALLOC_FORCE_INLINE __attribute__((always_inline))
 #endif
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // ALIGN_DATA , some GCC versions gives warnings about standard C++ 'alignas' when applied to data
 #ifdef __GNUC__
-#define ALIGN_DATA( _alignment_ ) __attribute__((aligned( (_alignment_) )))
+#define LLMALLOC_ALIGN_DATA( _alignment_ ) __attribute__((aligned( (_alignment_) )))
 #elif _MSC_VER
-#define ALIGN_DATA( _alignment_ ) alignas( _alignment_ )
+#define LLMALLOC_ALIGN_DATA( _alignment_ ) alignas( _alignment_ )
 #endif
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // ALIGN_CODE, using alignas(64) or __attribute__(aligned(alignment)) for a function will work in GCC but MSVC won't compile
 #ifdef __GNUC__
-#define ALIGN_CODE( _alignment_ ) __attribute__((aligned( (_alignment_) )))
+#define LLMALLOC_ALIGN_CODE( _alignment_ ) __attribute__((aligned( (_alignment_) )))
 #elif _MSC_VER
 //No implementation provided for MSVC :
-#define ALIGN_CODE( _alignment_ )
+#define LLMALLOC_ALIGN_CODE( _alignment_ )
 #endif
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -238,19 +236,15 @@ inline int builtin_clzl(unsigned long value)
 // Compilers won`t add additional padding zeroes for "packed" data structures
 
 #ifdef __GNUC__
-#define PACKED( __Declaration__ ) __Declaration__ __attribute__((__packed__))
+#define LLMALLOC_PACKED( __Declaration__ ) __Declaration__ __attribute__((__packed__))
 #elif _MSC_VER
-#define PACKED( __Declaration__ ) __pragma( pack(push, 1) ) __Declaration__ __pragma( pack(pop))
+#define LLMALLOC_PACKED( __Declaration__ ) __pragma( pack(push, 1) ) __Declaration__ __pragma( pack(pop))
 #endif
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // UNUSED
 //To avoid unused variable warnings
-#if defined(__GNUC__)
-#define UNUSED(x) (void)(x)
-#elif defined(_MSC_VER)
-#define UNUSED(x) __pragma(warning(suppress:4100)) x
-#endif
+#define LLMALLOC_UNUSED(x) (void)(x)
 
 namespace AlignmentConstants
 {
@@ -291,16 +285,15 @@ inline void pause(uint16_t repeat_count=100)
     }
     #endif
 }
-
 // ANSI coloured output for Linux , message box for Windows
 
 #ifdef NDEBUG
-#define assert_msg(expr, message) ((void)0)
+#define llmalloc_assert_msg(expr, message) ((void)0)
 #else
 #ifdef __linux__
 #define MAKE_RED(x)    "\033[0;31m" x "\033[0m"
 #define MAKE_YELLOW(x) "\033[0;33m" x "\033[0m"
-#define assert_msg(expr, message) \
+#define llmalloc_assert_msg(expr, message) \
             do { \
                 if (!(expr)) { \
                     fprintf(stderr,  MAKE_RED("Assertion failed : ")  MAKE_YELLOW("%s") "\n", message); \
@@ -309,7 +302,7 @@ inline void pause(uint16_t repeat_count=100)
             } while (0)
 #elif _WIN32
 #pragma comment(lib, "user32.lib")
-#define assert_msg(expr, message) \
+#define llmalloc_assert_msg(expr, message) \
             do { \
                 if (!(expr)) { \
                     MessageBoxA(NULL, message, "Assertion Failed", MB_ICONERROR | MB_OK); \
@@ -318,7 +311,6 @@ inline void pause(uint16_t repeat_count=100)
             } while (0)
 #endif
 #endif
-
 /*
     - To work with 2MB huge pages on Linux and  2MB or 1 GB huge pages on Windows , you may need to configure your system :
 
@@ -376,7 +368,7 @@ class VirtualMemory
         {
             bool ret{ false };
             #ifdef __linux__
-            if (get_minimum_huge_page_size() <= 0)
+            if (get_minimum_huge_page_size() == 0)
             {
                 ret = false;
             }
@@ -504,7 +496,7 @@ class VirtualMemory
                 }
             }
             #else
-            UNUSED(numa_node);
+            LLMALLOC_UNUSED(numa_node);
             #endif
 
             #elif _WIN32
@@ -516,7 +508,7 @@ class VirtualMemory
             }
 
             #ifndef ENABLE_NUMA
-            UNUSED(numa_node);
+            LLMALLOC_UNUSED(numa_node);
             ret = VirtualAlloc(hint_address, size, flags, PAGE_READWRITE);
             #else
             if(numa_node >= 0)
@@ -682,7 +674,6 @@ class VirtualMemory
         }
         #endif
 };
-
 /*  
     Standard C++ thread_local keyword does not allow you to specify thread specific destructors
     and also can't be applied to class members
@@ -759,7 +750,6 @@ class ThreadLocalStorage
             ThreadLocalStorage(ThreadLocalStorage&& other) = delete;
             ThreadLocalStorage& operator=(ThreadLocalStorage&& other) = delete;
 };
-
 /*
     Provides :
 
@@ -1018,7 +1008,6 @@ class AlignmentAndSizeUtils
             return ((input + multiple - 1) & ~(multiple - 1));
         }
 };
-
 /*
     A CAS ( compare-and-swap ) based POD ( https://en.cppreference.com/w/cpp/language/classes#POD_class ) spinlock
     As it is POD , it can be used inside packed declarations.
@@ -1047,7 +1036,7 @@ template<std::size_t alignment=sizeof(uint32_t), std::size_t spin_count = 1024, 
 struct UserspaceSpinlock
 {
     // No privates, ctors or dtors to stay as PACKED+POD
-    ALIGN_DATA(alignment) uint32_t m_flag=0;
+    LLMALLOC_ALIGN_DATA(alignment) uint32_t m_flag=0;
 
     void initialise()
     {
@@ -1075,9 +1064,9 @@ struct UserspaceSpinlock
         }
     }
 
-    FORCE_INLINE bool try_lock()
+    LLMALLOC_FORCE_INLINE bool try_lock()
     {
-        if (builtin_cas(&m_flag, 0, 1) == 1)
+        if (llmalloc_builtin_cas(&m_flag, 0, 1) == 1)
         {
             return false;
         }
@@ -1085,7 +1074,7 @@ struct UserspaceSpinlock
         return true;
     }
 
-    FORCE_INLINE void unlock()
+    LLMALLOC_FORCE_INLINE void unlock()
     {
         m_flag = 0;
     }
@@ -1133,7 +1122,6 @@ public:
 private:
     LockType m_lock;
 };
-
 // NON THREAD SAFE ITEM QUEUE
 
 template <typename T>
@@ -1189,7 +1177,7 @@ class SinglyLinkedList
         }
 
     private:
-        ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) SinglyLinkedListNode* m_head = nullptr;
+        LLMALLOC_ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) SinglyLinkedListNode* m_head = nullptr;
         std::size_t m_capacity = 0;
         std::size_t m_size = 0;
 };
@@ -1257,12 +1245,11 @@ class BoundedQueue
         }
     
     private:
-        ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) typename SinglyLinkedList<T>::SinglyLinkedListNode* m_head = nullptr;
+        LLMALLOC_ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) typename SinglyLinkedList<T>::SinglyLinkedListNode* m_head = nullptr;
         char* m_buffer = nullptr;
         std::size_t m_buffer_length = 0;
         SinglyLinkedList<T> m_freelist; // Underlying memory
 };
-
 /*
     REFERENCE : THIS CODE IS A COSMETICALLY MODIFIED VERSION OF ERIK RIGTORP'S IMPLEMENTATION : https://github.com/rigtorp/MPMCQueue/ ( MIT Licence )
 */
@@ -1289,7 +1276,7 @@ template <typename T> struct Slot
 
     T&& move() { return reinterpret_cast<T&&>(storage); }
 
-    ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) std::atomic<std::size_t> turn = { 0 };
+    LLMALLOC_ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) std::atomic<std::size_t> turn = { 0 };
     typename std::aligned_storage<sizeof(T), alignof(T)>::type storage;
 };
 
@@ -1430,19 +1417,19 @@ public:
     }
 
 private:
-    FORCE_INLINE std::size_t modulo_capacity(std::size_t input) const
+    LLMALLOC_FORCE_INLINE std::size_t modulo_capacity(std::size_t input) const
     {
         assert(m_capacity > 0);
         return input - (input / m_capacity) * m_capacity;
     }
 
-    FORCE_INLINE std::size_t turn(std::size_t i) const { return i / m_capacity; }
+    LLMALLOC_FORCE_INLINE std::size_t turn(std::size_t i) const { return i / m_capacity; }
 
     std::size_t m_capacity = 0;
     Slot<T>* m_slots = nullptr;
 
-    ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) std::atomic<std::size_t> m_head = 0;
-    ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) std::atomic<std::size_t> m_tail = 0;
+    LLMALLOC_ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) std::atomic<std::size_t> m_head = 0;
+    LLMALLOC_ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) std::atomic<std::size_t> m_tail = 0;
 };
 
 template <typename T, typename Enable = void>
@@ -1473,7 +1460,6 @@ struct MurmurHash3<T, typename std::enable_if<std::is_same<T, uint64_t>::value>:
         return static_cast<std::size_t>(h);
     }
 };
-
 /*
     - MPMC THREAD SAFE HOWEVER DESIGNED FOR A CERTAIN SCENARIO THEREFORE DON'T USE IT SOMEWHERE ELSE !
       
@@ -1560,7 +1546,7 @@ class MPMCDictionary
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             if (m_node_cache_index >= m_node_cache_capacity)
             {
-                if (unlikely(build_node_cache() == false))
+                if (llmalloc_unlikely(build_node_cache() == false))
                 {
                     m_insertion_lock.unlock();
                     return false;
@@ -1609,7 +1595,7 @@ class MPMCDictionary
         }
 
     private:
-        ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) std::atomic<DictionaryNode*>* m_table = nullptr;
+        LLMALLOC_ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) std::atomic<DictionaryNode*>* m_table = nullptr;
         std::size_t m_table_size = 0;
 
         HashFunction m_hash;
@@ -1632,7 +1618,7 @@ class MPMCDictionary
             for (std::size_t i = 0; i < m_node_cache_capacity; i++)
             {
                 DictionaryNode* new_node = new (new_node_cache + i) DictionaryNode(); // Placement new
-                UNUSED(new_node);
+                LLMALLOC_UNUSED(new_node);
             }
             
             m_node_cache = new_node_cache;
@@ -1640,14 +1626,13 @@ class MPMCDictionary
             return true;
         }
 
-        FORCE_INLINE std::size_t hash(const Key& key) const
+        LLMALLOC_FORCE_INLINE std::size_t hash(const Key& key) const
         {
             auto hash_value = m_hash(key);
             auto result = hash_value - (hash_value / m_table_size) * m_table_size;
             return result;
         }
 };
-
 /*
     - Not thread safe
     
@@ -1691,7 +1676,7 @@ class Dictionary
         {
             assert(m_table_size > 0 && m_node_cache != nullptr);
 
-            if (unlikely(m_item_count == m_table_size)) // Load factor 1 , we need to resize
+            if (llmalloc_unlikely(m_item_count == m_table_size)) // Load factor 1 , we need to resize
             {
                 if (grow(m_table_size * 2) == false)
                 {
@@ -1799,7 +1784,7 @@ class Dictionary
             for (std::size_t i = copy_count; i < size; i++)
             {
                 DictionaryNode* new_node = new (new_node_cache + i) DictionaryNode(); // Placement new
-                UNUSED(new_node);
+                LLMALLOC_UNUSED(new_node);
             }
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1815,7 +1800,7 @@ class Dictionary
             return true;
         }
 
-        FORCE_INLINE std::size_t modulo_table_size(std::size_t input) const
+        LLMALLOC_FORCE_INLINE std::size_t modulo_table_size(std::size_t input) const
         {
             assert(m_table_size > 0);
             return input - (input / m_table_size) * m_table_size;
@@ -1842,7 +1827,6 @@ class Dictionary
             }
         }
 };
-
 /*
     - IT RELEASES ONLY UNUSED PAGES. RELEASING USED PAGES IS UP TO THE CALLERS.
 
@@ -1922,14 +1906,14 @@ class Arena : public Lockable<LockPolicy::USERSPACE_LOCK> // MAINTAINS A SHARED 
             //////////////////////////////////////////////////
             this->leave_concurrent_context();
 
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, m_page_alignment), "Arena should not return an address which is not aligned to its page alignment setting.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, m_page_alignment), "Arena should not return an address which is not aligned to its page alignment setting.");
 
             return ret;
         }
 
         [[nodiscard]] char* allocate_aligned(std::size_t size, std::size_t alignment)
         {
-            assert_msg(AlignmentAndSizeUtils::is_size_a_multiple_of_page_allocation_granularity(alignment), "Special alignment value requested from Arena should be a multiple of OS page allocation granularity.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_size_a_multiple_of_page_allocation_granularity(alignment), "Special alignment value requested from Arena should be a multiple of OS page allocation granularity.");
 
             if(alignment == m_page_alignment)
             {
@@ -1937,7 +1921,7 @@ class Arena : public Lockable<LockPolicy::USERSPACE_LOCK> // MAINTAINS A SHARED 
             }
             else
             {
-                assert_msg(AlignmentAndSizeUtils::is_size_a_multiple_of_page_allocation_granularity(m_page_alignment), "Special alignment value requested from Arena should be a multiple of Arena's page alignment value.");
+                llmalloc_assert_msg(AlignmentAndSizeUtils::is_size_a_multiple_of_page_allocation_granularity(m_page_alignment), "Special alignment value requested from Arena should be a multiple of Arena's page alignment value.");
 
                 auto ptr = reinterpret_cast<uint64_t>(allocate(size + alignment));
 
@@ -1961,7 +1945,7 @@ class Arena : public Lockable<LockPolicy::USERSPACE_LOCK> // MAINTAINS A SHARED 
             VirtualMemory::deallocate(address, size);
             #else
             auto release_success = VirtualMemory::deallocate(address, size);
-            assert_msg(release_success, "Failure to release pages can lead to system wide issues\n");
+            llmalloc_assert_msg(release_success, "Failure to release pages can lead to system wide issues\n");
             #endif
         }
 
@@ -1975,8 +1959,8 @@ class Arena : public Lockable<LockPolicy::USERSPACE_LOCK> // MAINTAINS A SHARED 
 
                 static void deallocate(void* address, std::size_t size)
                 {
-                    UNUSED(address);
-                    UNUSED(size);
+                    LLMALLOC_UNUSED(address);
+                    LLMALLOC_UNUSED(size);
                 }
         };
 
@@ -2065,7 +2049,7 @@ class Arena : public Lockable<LockPolicy::USERSPACE_LOCK> // MAINTAINS A SHARED 
             }
             auto ret = buffer + delta;
 
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Arena's overallocation to get an aligned virtual memory address failed.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Arena's overallocation to get an aligned virtual memory address failed.");
 
             return ret;
         }
@@ -2089,7 +2073,6 @@ class Arena : public Lockable<LockPolicy::USERSPACE_LOCK> // MAINTAINS A SHARED 
             m_cache_buffer = nullptr;
         }
 };
-
 /*
     POD LOGICAL PAGE HEADER
     LOGICAL PAGE HEADERS WILL BE PLACED TO THE FIRST 64 BYTES OF EVERY LOGICAL PAGE
@@ -2104,7 +2087,7 @@ enum class LogicalPageHeaderFlags : uint16_t
     IS_USED = 0x0001
 };
 
-PACKED
+LLMALLOC_PACKED
 (
     struct LogicalPageHeader // No privates , member initialisers, ctors or dtors to stay as PACKED+POD
     {
@@ -2165,7 +2148,6 @@ PACKED
         }
     }
 );
-
 /*
     - IT IS A FIRST-IN-LAST-OUT FREELIST IMPLEMENTATION. IT CAN HOLD ONLY ONE SIZE CLASS.
 
@@ -2177,7 +2159,7 @@ class LogicalPage
 {
     public:
         
-        PACKED
+        LLMALLOC_PACKED
         (
             struct LogicalPageNode      // No private members/method to stay as POD+PACKED
             {
@@ -2212,8 +2194,8 @@ class LogicalPage
             #ifndef UNIT_TEST
             // Segment should place us to a start of aligned vm page + size of header
             void* buffer_start_including_header = reinterpret_cast<void*>(reinterpret_cast<std::size_t>(buffer) - sizeof(*this));
-            assert_msg(AlignmentAndSizeUtils::is_address_page_allocation_granularity_aligned(buffer_start_including_header) == true, "LogicalPage : Segments or heaps should pass buffers which are aligned to OS page allocation granularity.");
-            UNUSED(buffer_start_including_header);
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_page_allocation_granularity_aligned(buffer_start_including_header) == true, "LogicalPage : Segments or heaps should pass buffers which are aligned to OS page allocation granularity.");
+            LLMALLOC_UNUSED(buffer_start_including_header);
             #endif
 
             this->m_page_header.initialise();
@@ -2226,14 +2208,14 @@ class LogicalPage
             return true;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate(const std::size_t size)
         {
-            UNUSED(size); 
+            LLMALLOC_UNUSED(size);
 
             NodeType* free_node = pop();
 
-            if (unlikely(free_node == nullptr))
+            if (llmalloc_unlikely(free_node == nullptr))
             {
                 return nullptr;
             }
@@ -2243,7 +2225,7 @@ class LogicalPage
             return  reinterpret_cast<void*>(free_node);
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void deallocate(void* ptr)
         {
             this->m_page_header.m_used_size -= this->m_page_header.m_size_class;
@@ -2252,7 +2234,7 @@ class LogicalPage
 
         std::size_t get_usable_size(void* ptr) 
         { 
-            UNUSED(ptr);
+            LLMALLOC_UNUSED(ptr);
             return  static_cast<std::size_t>(this->m_page_header.m_size_class); 
         }
 
@@ -2292,15 +2274,15 @@ class LogicalPage
             }
         }
 
-        FORCE_INLINE void push(NodeType* new_node)
+        LLMALLOC_FORCE_INLINE void push(NodeType* new_node)
         {
             new_node->m_next = reinterpret_cast<NodeType*>(this->m_page_header.m_head);
             this->m_page_header.m_head = reinterpret_cast<uint64_t>(new_node);
         }
 
-        FORCE_INLINE NodeType* pop()
+        LLMALLOC_FORCE_INLINE NodeType* pop()
         {
-            if(unlikely(this->m_page_header.m_head == 0))
+            if(llmalloc_unlikely(this->m_page_header.m_head == 0))
             {
                 return nullptr;
             }
@@ -2310,7 +2292,6 @@ class LogicalPage
             return top;
         }
 };
-
 /*
     - A SEGMENT IS A COLLECTION OF LOGICAL PAGES. IT ALLOWS TO GROW IN SIZE AND TO RETURN UNUSED LOGICAL PAGES BACK TO THE SYSTEM
 
@@ -2340,7 +2321,7 @@ class Segment : public Lockable<lock_policy>
         Segment()
         {
             m_logical_page_object_size = sizeof(LogicalPageType);
-            assert_msg(m_logical_page_object_size == sizeof(LogicalPageHeader), "Segment: Logical page object size should not exceed logical page header size." );
+            llmalloc_assert_msg(m_logical_page_object_size == sizeof(LogicalPageHeader), "Segment: Logical page object size should not exceed logical page header size." );
 
             m_segment_id_counter++;
 
@@ -2379,7 +2360,7 @@ class Segment : public Lockable<lock_policy>
                 return false;
             }
 
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(external_buffer, params.m_logical_page_size) == true, "Segment: Passed buffer is not aligned to specified logical page size. This is a requirement to enable quick access to logical pages from pointers.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(external_buffer, params.m_logical_page_size) == true, "Segment: Passed buffer is not aligned to specified logical page size. This is a requirement to enable quick access to logical pages from pointers.");
 
             m_params = params;
             m_arena = arena_ptr;
@@ -2392,7 +2373,7 @@ class Segment : public Lockable<lock_policy>
             return true;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate(std::size_t size = 0)
         {
             void* ret = nullptr;
@@ -2423,19 +2404,19 @@ class Segment : public Lockable<lock_policy>
             return ret;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void deallocate(void* ptr)
         {
             if( m_head == nullptr ) { return;}
             auto affected = get_logical_page_from_address(ptr, m_params.m_logical_page_size);
-            assert_msg(affected->get_segment_id() == m_segment_id, "Deleted ptr's segment id should match this segment's id");
-            assert_msg(affected->get_usable_size(ptr) == m_params.m_size_class, "Deleted ptr's size class should match this segment's size class");
+            llmalloc_assert_msg(affected->get_segment_id() == m_segment_id, "Deleted ptr's segment id should match this segment's id");
+            llmalloc_assert_msg(affected->get_usable_size(ptr) == m_params.m_size_class, "Deleted ptr's size class should match this segment's size class");
 
             this->enter_concurrent_context(); // Locking only for central heap
 
             affected->deallocate(ptr);
 
-            if (unlikely(affected->get_used_size() == 0))
+            if (llmalloc_unlikely(affected->get_used_size() == 0))
             {
                 affected->mark_as_non_used();
 
@@ -2494,7 +2475,7 @@ class Segment : public Lockable<lock_policy>
             return target_logical_page->get_segment_id();
         }
 
-        FORCE_INLINE uint16_t get_id() const { return m_segment_id; }
+        LLMALLOC_FORCE_INLINE uint16_t get_id() const { return m_segment_id; }
         
         LogicalPageType* get_head_logical_page() { return m_head; }
 
@@ -2517,7 +2498,7 @@ class Segment : public Lockable<lock_policy>
         // Returns first logical page ptr of the grow
         [[nodiscard]] LogicalPageType* grow(char* buffer, std::size_t logical_page_count)
         {
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(buffer, m_params.m_logical_page_size), "Passed buffer to segment grow should be aligned to the logical page size.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(buffer, m_params.m_logical_page_size), "Passed buffer to segment grow should be aligned to the logical page size.");
             LogicalPageType* first_new_logical_page = nullptr;
             LogicalPageType* previous_page = m_tail;
             LogicalPageType* iter_page = nullptr;
@@ -2543,7 +2524,7 @@ class Segment : public Lockable<lock_policy>
             };
             /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // FIRST PAGE
-            if (unlikely(create_new_logical_page(buffer) == false))
+            if (llmalloc_unlikely(create_new_logical_page(buffer) == false))
             {
                 return nullptr;
             }
@@ -2762,7 +2743,7 @@ class Segment : public Lockable<lock_policy>
         {
             minimum_new_logical_page_count = get_required_page_count_for_allocation(m_params.m_logical_page_size, m_logical_page_object_size, m_params.m_size_class, size / m_params.m_size_class);
 
-            if ( likely(m_params.m_grow_coefficient > 0))
+            if ( llmalloc_likely(m_params.m_grow_coefficient > 0))
             {
                 desired_new_logical_page_count = static_cast<std::size_t>(m_logical_page_count * m_params.m_grow_coefficient);
 
@@ -2790,7 +2771,6 @@ class Segment : public Lockable<lock_policy>
             return needed_page_count;
         }
 };
-
 /*
     - THE PASSED ALLOCATOR WILL HAVE A CENTRAL HEAP AND ALSO THREAD LOCAL HEAPS.
 
@@ -2808,7 +2788,7 @@ public:
 
     // THIS CLASS IS INTENDED TO BE USED DIRECTLY IN MALLOC REPLACEMENTS
     // SINCE THIS ONE IS A TEMPLATE CLASS , WE HAVE TO ENSURE A SINGLE ONLY STATIC VARIABLE INITIALISATION
-    FORCE_INLINE  static ScalableAllocator& get_instance()
+    LLMALLOC_FORCE_INLINE  static ScalableAllocator& get_instance()
     {
         static ScalableAllocator instance;
         return instance;
@@ -2873,7 +2853,7 @@ public:
     void set_enable_fast_shutdown(bool b) { m_fast_shutdown = b; }
     bool get_enable_fast_shutdown() const { return m_fast_shutdown; }
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+    LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
     void* allocate(const std::size_t size)
     {
         void* ret{ nullptr };
@@ -2898,7 +2878,7 @@ public:
         return ret;
     }
 
-    ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+    LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
     void deallocate(void* ptr, bool is_small_object = true)
     {
         bool returned_to_local_heap = false;
@@ -3024,7 +3004,7 @@ private:
         return get_thread_local_heap_internal();
     }
 
-    FORCE_INLINE LocalHeapType* get_thread_local_heap_internal()
+    LLMALLOC_FORCE_INLINE LocalHeapType* get_thread_local_heap_internal()
     {
         auto thread_local_heap = reinterpret_cast<LocalHeapType*>(ThreadLocalStorage::get_instance().get());
 
@@ -3167,7 +3147,7 @@ class HeapPow2
         {
             //////////////////////////////////////////////////////////////////////////////////////////////
             // 1. CHECKS
-            assert_msg(arena, "Heap must receive a valid arena instance.");
+            llmalloc_assert_msg(arena, "Heap must receive a valid arena instance.");
 
             // Logical page sizes should be multiples of page allocation granularity ( 4KB on Linux ,64 KB on Windows )
             if (!AlignmentAndSizeUtils::is_size_a_multiple_of_page_allocation_granularity(params.small_object_logical_page_size))
@@ -3206,11 +3186,11 @@ class HeapPow2
             //////////////////////////////////////////////////////////////////////////////////////////////
             // 3. ALLOCATE BUFFERS
             auto small_objects_buffer_address = reinterpret_cast<uint64_t>(arena->allocate(small_objects_required_buffer_size));
-            assert_msg(AlignmentAndSizeUtils::is_address_page_allocation_granularity_aligned(reinterpret_cast<void*>(small_objects_buffer_address)), "HeapPow2: Arena failed to pass an address which is aligned to OS page allocation granularity.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_page_allocation_granularity_aligned(reinterpret_cast<void*>(small_objects_buffer_address)), "HeapPow2: Arena failed to pass an address which is aligned to OS page allocation granularity.");
 
             char* medium_objects_buffer_address = reinterpret_cast<char*>(arena->allocate_aligned(medium_objects_required_buffer_size, m_medium_object_logical_page_size));
-            assert_msg(AlignmentAndSizeUtils::is_address_page_allocation_granularity_aligned(reinterpret_cast<void*>(medium_objects_buffer_address)), "HeapPow2: Arena failed to pass an address which is aligned to OS page allocation granularity.");
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(reinterpret_cast<void*>(medium_objects_buffer_address), m_medium_object_logical_page_size), "HeapPow2: Failed to get an address which is aligned to medium objects page size.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_page_allocation_granularity_aligned(reinterpret_cast<void*>(medium_objects_buffer_address)), "HeapPow2: Arena failed to pass an address which is aligned to OS page allocation granularity.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(reinterpret_cast<void*>(medium_objects_buffer_address), m_medium_object_logical_page_size), "HeapPow2: Failed to get an address which is aligned to medium objects page size.");
 
             //////////////////////////////////////////////////////////////////////////////////////////////
             // 4. DISTRIBUTE BUFFER TO BINS ,  NEED TO PLACE LOGICAL PAGE HEADERS TO START OF PAGES !
@@ -3287,7 +3267,7 @@ class HeapPow2
             return true;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate(std::size_t size = 0)
         {
             size = size < MIN_SIZE_CLASS ? MIN_SIZE_CLASS : size;
@@ -3296,7 +3276,7 @@ class HeapPow2
 
             m_potential_pending_max_deallocation_count++;
 
-            if (unlikely(m_potential_pending_max_deallocation_count >= m_deallocation_queue_processing_threshold))
+            if (llmalloc_unlikely(m_potential_pending_max_deallocation_count >= m_deallocation_queue_processing_threshold))
             {
                 return allocate_by_processing_deallocation_queues(bin_index, size);
             }
@@ -3317,7 +3297,7 @@ class HeapPow2
         }
 
         // Slow path removal function
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void* allocate_by_processing_deallocation_queues(std::size_t bin_index, std::size_t size)
         {
             #ifdef ENABLE_PERF_TRACES
@@ -3343,7 +3323,7 @@ class HeapPow2
             return m_segments[bin_index].allocate(size);
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         bool deallocate(void* ptr, bool is_small_object)
         {
             auto logical_page_size = is_small_object ? m_small_object_logical_page_size : m_medium_object_logical_page_size;
@@ -3351,7 +3331,7 @@ class HeapPow2
 
             auto size_class = target_logical_page->get_size_class();
 
-            assert_msg(size_class >= MIN_SIZE_CLASS, "HeapPow2 deallocate : Found size class is invalid. The pointer may not have been allocated by this allocator.");
+            llmalloc_assert_msg(size_class >= MIN_SIZE_CLASS, "HeapPow2 deallocate : Found size class is invalid. The pointer may not have been allocated by this allocator.");
             
             auto bin_index = get_pow2_bin_index_from_size(size_class);
 
@@ -3412,7 +3392,7 @@ class HeapPow2
 
                 if (m_recyclable_deallocation_queues[bin_index].try_pop(pointer))
                 {
-                    if (likely(ret != nullptr))
+                    if (llmalloc_likely(ret != nullptr))
                     {
                         m_segments[bin_index].deallocate(reinterpret_cast<void*>(pointer));
                     }
@@ -3431,13 +3411,13 @@ class HeapPow2
         }
 
         // Reference : https://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
-        FORCE_INLINE std::size_t get_first_pow2_of(std::size_t input)
+        LLMALLOC_FORCE_INLINE std::size_t get_first_pow2_of(std::size_t input)
         {
             assert(input>= MIN_SIZE_CLASS);
 
             /* 
             No need for the if check below , as the caller will pass a miniumum of MIN_SIZE_CLASS which is > 1
-            if (unlikely(input <= 1))
+            if (llmalloc_unlikely(input <= 1))
             {
                 return 1;
             }
@@ -3454,9 +3434,9 @@ class HeapPow2
         }
 
         // IMPLEMENTATION IS FOR 64 BIT ONLY
-        FORCE_INLINE std::size_t get_pow2_bin_index_from_size(std::size_t size)
+        LLMALLOC_FORCE_INLINE std::size_t get_pow2_bin_index_from_size(std::size_t size)
         {
-            std::size_t index = static_cast<std::size_t>(63 - builtin_clzl(static_cast<unsigned long>(size))) - LOG2_MIN_SIZE_CLASS;
+            std::size_t index = static_cast<std::size_t>(63 - llmalloc_builtin_clzl(static_cast<unsigned long>(size))) - LOG2_MIN_SIZE_CLASS;
             index = index > MAX_BIN_INDEX ? MAX_BIN_INDEX : index;
             return index;
         }
@@ -3497,16 +3477,16 @@ class HeapPool
 
         [[nodiscard]] bool create(const HeapCreationParams& params, ArenaType* arena_ptr)
         {
-            assert_msg(params.size_class > 0, "Pool size class should be greater than zero.");
-            assert_msg(params.initial_size > 0, "Pool initial size should be greater than zero.");
-            assert_msg(params.initial_size % params.logical_page_size == 0, "Initial pool size should be a multiple of its logical page size.");
+            llmalloc_assert_msg(params.size_class > 0, "Pool size class should be greater than zero.");
+            llmalloc_assert_msg(params.initial_size > 0, "Pool initial size should be greater than zero.");
+            llmalloc_assert_msg(params.initial_size % params.logical_page_size == 0, "Initial pool size should be a multiple of its logical page size.");
 
             m_arena = arena_ptr;
 
             auto buffer_length = params.initial_size;
             auto buffer_address = reinterpret_cast<uint64_t>(m_arena->allocate(buffer_length));
 
-            assert_msg(AlignmentAndSizeUtils::is_address_page_allocation_granularity_aligned(reinterpret_cast<void*>(buffer_address)), "Arena failed to return page alloc granularity aligned address for memory pool.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_page_allocation_granularity_aligned(reinterpret_cast<void*>(buffer_address)), "Arena failed to return page alloc granularity aligned address for memory pool.");
             
             std::size_t segment_size = static_cast<std::size_t>(buffer_length);
             std::size_t logical_page_count_per_segment = static_cast<std::size_t>(segment_size / params.logical_page_size);
@@ -3540,14 +3520,14 @@ class HeapPool
             return true;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate(std::size_t size = 0)
         {
-            UNUSED(size);
+            LLMALLOC_UNUSED(size);
 
             m_potential_pending_max_deallocation_count++;
 
-            if(unlikely(m_potential_pending_max_deallocation_count.load() >= m_deallocation_queue_processing_threshold ))
+            if(llmalloc_unlikely(m_potential_pending_max_deallocation_count.load() >= m_deallocation_queue_processing_threshold ))
             {
                 return allocate_by_processing_deallocation_queue(size);
             }
@@ -3568,7 +3548,7 @@ class HeapPool
         }
 
         // Slow path removal function
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate_by_processing_deallocation_queue(std::size_t size)
         {
             #ifdef ENABLE_PERF_TRACES
@@ -3594,10 +3574,10 @@ class HeapPool
             return m_segment.allocate(size);
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         bool deallocate(void* ptr, bool is_small_object = false)
         {
-            UNUSED(is_small_object);
+            LLMALLOC_UNUSED(is_small_object);
 
             if(m_segment.owns_pointer(ptr))
             {
@@ -3617,7 +3597,7 @@ class HeapPool
 
         SegmentType* get_segment(std::size_t bin_index)
         {
-            assert_msg(bin_index>0, "HeapPool holds only a single segment.");
+            llmalloc_assert_msg(bin_index>0, "HeapPool holds only a single segment.");
             return &m_segment;
         }
 
@@ -3643,7 +3623,7 @@ class HeapPool
 
                 if (m_recyclable_deallocation_queue.try_pop(pointer))
                 {
-                    if (likely(ret != nullptr))
+                    if (llmalloc_likely(ret != nullptr))
                     {
                         m_segment.deallocate(reinterpret_cast<void*>(pointer));
                     }
@@ -3661,7 +3641,6 @@ class HeapPool
             return ret;
         }
 };
-
 // INTERFACE WRAPPER FOR THREAD CACHING MEMORY POOL
 
 struct ScalablePoolOptions
@@ -3776,16 +3755,16 @@ class ScalablePool
             return ScalableMemoryPool::get_instance().create(central_heap_params, local_heap_params, arena_options);
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate()
         {
             return ScalableMemoryPool::get_instance().allocate(sizeof(T));
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void deallocate(void*ptr)
         {
-            if (unlikely(ptr == nullptr))
+            if (llmalloc_unlikely(ptr == nullptr))
             {
                 return;
             }
@@ -3793,7 +3772,6 @@ class ScalablePool
             ScalableMemoryPool::get_instance().deallocate(ptr);
         }
 };
-
 /*
     - std::allocator::allocate interface has to return contigious buffer for multiple objects which is not supported by HeapPool.
       ScalableMalloc have extra consideratinos for concurrency so not optimal for single threaded STL container allocators.
@@ -3831,7 +3809,7 @@ class SingleThreadedAllocator
 
         static inline constexpr std::size_t MAX_SUPPORTED_ALIGNMENT = 16;
 
-        FORCE_INLINE  static SingleThreadedAllocator& get_instance()
+        LLMALLOC_FORCE_INLINE  static SingleThreadedAllocator& get_instance()
         {
             static SingleThreadedAllocator instance;
             return instance;
@@ -3890,22 +3868,22 @@ class SingleThreadedAllocator
             return true;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate(std::size_t size)
         {
-            if (unlikely( size > m_max_allocation_size ))
+            if (llmalloc_unlikely( size > m_max_allocation_size ))
             {
                 return allocate_large_object(size);
             }
 
             void* ptr = m_heap.allocate(size);
 
-            if(unlikely(size > m_max_small_object_size))
+            if(llmalloc_unlikely(size > m_max_small_object_size))
             {
                 register_medium_object(ptr, size);
             }
     
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(ptr, AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ptr, AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
             return ptr;
         }
         
@@ -3914,7 +3892,7 @@ class SingleThreadedAllocator
         {
             auto ptr = VirtualMemory::allocate(size, false);
             m_non_small_objects_hash_map.insert(reinterpret_cast<uint64_t>(ptr), size);
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(ptr, AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ptr, AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
             return ptr;
         }
 
@@ -3924,12 +3902,12 @@ class SingleThreadedAllocator
             m_non_small_objects_hash_map.insert(reinterpret_cast<uint64_t>(ptr), size);
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void deallocate(void*ptr)
         {
             std::size_t medium_or_large_size{0};
 
-            if (unlikely( m_non_small_objects_hash_map.get( reinterpret_cast<uint64_t>(ptr), medium_or_large_size) ))
+            if (llmalloc_unlikely( m_non_small_objects_hash_map.get( reinterpret_cast<uint64_t>(ptr), medium_or_large_size) ))
             {
                 deallocate_medium_or_large_object(ptr, medium_or_large_size);
                 return;
@@ -3972,7 +3950,7 @@ class STLAllocator
         template <class U>
         STLAllocator(const STLAllocator<U>&) {}
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         T* allocate(const std::size_t n)
         {
             T* ret = reinterpret_cast<T*>(SingleThreadedAllocator::get_instance().allocate(n * sizeof(T)));
@@ -3985,10 +3963,10 @@ class STLAllocator
             return ret;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void deallocate(T* const p, const std::size_t n)
         {
-            UNUSED(n);
+            LLMALLOC_UNUSED(n);
             SingleThreadedAllocator::get_instance().deallocate(p);
         }
 
@@ -4012,12 +3990,12 @@ class PMRResource : public std::pmr::memory_resource
 {
     private : 
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* do_allocate(std::size_t bytes, std::size_t alignment) override 
         {
-            assert_msg(alignment <= SingleThreadedAllocator::MAX_SUPPORTED_ALIGNMENT, "llmalloc::PMRResource supports alignments up to 16 bytes only."); // Debug mode check
+            llmalloc_assert_msg(alignment <= SingleThreadedAllocator::MAX_SUPPORTED_ALIGNMENT, "llmalloc::PMRResource supports alignments up to 16 bytes only."); // Debug mode check
             
-            if(unlikely(alignment > SingleThreadedAllocator::MAX_SUPPORTED_ALIGNMENT)) // Release mode check
+            if(llmalloc_unlikely(alignment > SingleThreadedAllocator::MAX_SUPPORTED_ALIGNMENT)) // Release mode check
             {
                 throw std::bad_alloc();
             }
@@ -4032,11 +4010,11 @@ class PMRResource : public std::pmr::memory_resource
             return ptr;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void do_deallocate(void* p, std::size_t bytes, std::size_t alignment) override 
         {
-            UNUSED(bytes);
-            UNUSED(alignment);
+            LLMALLOC_UNUSED(bytes);
+            LLMALLOC_UNUSED(alignment);
             llmalloc::SingleThreadedAllocator::get_instance().deallocate(p);
         }
 
@@ -4108,7 +4086,7 @@ struct ScalableMallocOptions
     }
 };
 
-PACKED
+LLMALLOC_PACKED
 (
     struct AllocationMetadata
     {
@@ -4127,7 +4105,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
         using ScalableMallocType = ScalableAllocator<CentralHeapType, LocalHeapType>;
         using HashmapType = MPMCDictionary<uint64_t, AllocationMetadata, typename ArenaType::MetadataAllocator>;
 
-        FORCE_INLINE static ScalableMalloc& get_instance()
+        LLMALLOC_FORCE_INLINE static ScalableMalloc& get_instance()
         {
             static ScalableMalloc instance;
             return instance;
@@ -4199,22 +4177,22 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
         }
 
         #ifndef USE_ALLOC_HEADERS
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate(std::size_t size)
         {
-            if (unlikely( size > m_max_allocation_size ))
+            if (llmalloc_unlikely( size > m_max_allocation_size ))
             {
                 return allocate_large_object(size);
             }
 
             void* ptr = ScalableMallocType::get_instance().allocate(size);
 
-            if(unlikely(size > m_max_small_object_size))
+            if(llmalloc_unlikely(size > m_max_small_object_size))
             {
                 register_unpadded_medium_object(ptr, size);
             }
 
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(ptr, AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ptr, AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
             return ptr;
         }
 
@@ -4223,7 +4201,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
         {
             auto ptr = VirtualMemory::allocate(size, false);
             m_non_small_and_aligned_objects_map.insert(reinterpret_cast<uint64_t>(ptr), { size, 0 });
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(ptr, AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ptr, AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
             return ptr;
         }
 
@@ -4233,16 +4211,16 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
             m_non_small_and_aligned_objects_map.insert(reinterpret_cast<uint64_t>(ptr), { size, 0 });
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void deallocate(void*ptr)
         {
-            if (unlikely(ptr == nullptr))
+            if (llmalloc_unlikely(ptr == nullptr))
             {
                 return;
             }
 
             AllocationMetadata metadata;
-            if (unlikely(m_non_small_and_aligned_objects_map.get(reinterpret_cast<uint64_t>(ptr), metadata)))
+            if (llmalloc_unlikely(m_non_small_and_aligned_objects_map.get(reinterpret_cast<uint64_t>(ptr), metadata)))
             {
                 deallocate_non_small_or_aligned_object(metadata, ptr);
                 return;
@@ -4274,7 +4252,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
         {
             AllocationMetadata metadata;
 
-            if (unlikely(m_non_small_and_aligned_objects_map.get( reinterpret_cast<uint64_t>(ptr), metadata)))
+            if (llmalloc_unlikely(m_non_small_and_aligned_objects_map.get( reinterpret_cast<uint64_t>(ptr), metadata)))
             {
                 return metadata.size;
             }
@@ -4285,12 +4263,12 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
             return size_class;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void* allocate_aligned(std::size_t size, std::size_t alignment)
         {
             std::size_t adjusted_size = size + alignment; // Adding padding bytes
             
-            if (unlikely( adjusted_size > m_max_allocation_size ))
+            if (llmalloc_unlikely( adjusted_size > m_max_allocation_size ))
             {
                 return allocate_aligned_large_object(adjusted_size, alignment);
             }
@@ -4304,7 +4282,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
 
             m_non_small_and_aligned_objects_map.insert(reinterpret_cast<uint64_t>(ret), {adjusted_size , offset});
 
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Aligned allocation failed to meet the alignment requirement.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Aligned allocation failed to meet the alignment requirement.");
             return ret;
         }
 
@@ -4318,29 +4296,29 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
 
             m_non_small_and_aligned_objects_map.insert(reinterpret_cast<uint64_t>(ret), { adjusted_size , offset });
 
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Aligned allocation failed to meet the alignment requirement.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Aligned allocation failed to meet the alignment requirement.");
 
             return ret;
         }
         #else
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate(std::size_t size)
         {
             auto adjusted_size = size + sizeof(AllocationMetadata);
 
-            if (unlikely( adjusted_size > m_max_allocation_size ))
+            if (llmalloc_unlikely( adjusted_size > m_max_allocation_size ))
             {
                 return allocate_large_object(adjusted_size);
             }
 
             char* header_address = reinterpret_cast<char*>(ScalableMallocType::get_instance().allocate(adjusted_size));
 
-            if(likely(header_address))
+            if(llmalloc_likely(header_address))
             {
                 reinterpret_cast<AllocationMetadata*>(header_address)->size = adjusted_size;
                 reinterpret_cast<AllocationMetadata*>(header_address)->padding_bytes = 0;
 
-                assert_msg(AlignmentAndSizeUtils::is_address_aligned(header_address + sizeof(AllocationMetadata), AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
+                llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(header_address + sizeof(AllocationMetadata), AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
                 return  header_address + sizeof(AllocationMetadata);
             }
             else
@@ -4353,11 +4331,11 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
         void* allocate_large_object(std::size_t adjusted_size)
         {
             auto header_address = reinterpret_cast<char*>(VirtualMemory::allocate(adjusted_size, false));
-            if(likely(header_address))
+            if(llmalloc_likely(header_address))
             {
                 reinterpret_cast<AllocationMetadata*>(header_address)->size = adjusted_size;
                 reinterpret_cast<AllocationMetadata*>(header_address)->padding_bytes = 0;
-                assert_msg(AlignmentAndSizeUtils::is_address_aligned(header_address + sizeof(AllocationMetadata), AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
+                llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(header_address + sizeof(AllocationMetadata), AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
                 return header_address + sizeof(AllocationMetadata);
             }
             else
@@ -4366,10 +4344,10 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
             }
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void deallocate(void* ptr)
         {
-            if (unlikely(ptr == nullptr))
+            if (llmalloc_unlikely(ptr == nullptr))
             {
                 return;
             }
@@ -4378,7 +4356,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
             auto size = reinterpret_cast<AllocationMetadata*>(header_address)->size;
             auto orig_ptr = header_address - reinterpret_cast<AllocationMetadata*>(header_address)->padding_bytes;
 
-            if(likely(size <= m_max_small_object_size))
+            if(llmalloc_likely(size <= m_max_small_object_size))
             {
                 ScalableMallocType::get_instance().deallocate(orig_ptr, true);
             }
@@ -4398,19 +4376,19 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
             return reinterpret_cast<AllocationMetadata*>(header_address)->size - sizeof(AllocationMetadata);
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void* allocate_aligned(std::size_t size, std::size_t alignment)
         {
             std::size_t adjusted_size = size + sizeof(AllocationMetadata) + alignment; // Adding padding bytes
 
-            if (unlikely( adjusted_size > m_max_allocation_size ))
+            if (llmalloc_unlikely( adjusted_size > m_max_allocation_size ))
             {
                 return allocate_aligned_large_object(adjusted_size, alignment);
             }
 
             auto base = ScalableMallocType::get_instance().allocate(adjusted_size);
 
-            if(likely(base))
+            if(llmalloc_likely(base))
             {
                 uint64_t base_with_header = reinterpret_cast<std::uint64_t>(base) + sizeof(AllocationMetadata);
                 std::size_t remainder = base_with_header - ( (base_with_header / alignment) * alignment);
@@ -4422,7 +4400,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
                 reinterpret_cast<AllocationMetadata*>(header_address)->size = adjusted_size;
                 reinterpret_cast<AllocationMetadata*>(header_address)->padding_bytes = offset;
 
-                assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Aligned allocation failed to meet the alignment requirement.");
+                llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Aligned allocation failed to meet the alignment requirement.");
                 return ret;
             }
             else
@@ -4436,7 +4414,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
         {
             auto base = VirtualMemory::allocate(adjusted_size, false);
 
-            if(likely(base))
+            if(llmalloc_likely(base))
             {
                 uint64_t base_with_header = reinterpret_cast<std::uint64_t>(base) + sizeof(AllocationMetadata);
                 std::size_t remainder = base_with_header - ((base_with_header / alignment) * alignment);
@@ -4448,7 +4426,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
                 reinterpret_cast<AllocationMetadata*>(header_address)->size = adjusted_size;
                 reinterpret_cast<AllocationMetadata*>(header_address)->padding_bytes = offset;
 
-                assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Aligned allocation failed to meet the alignment requirement.");
+                llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Aligned allocation failed to meet the alignment requirement.");
 
                 return ret;
             }
@@ -4464,7 +4442,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
         {
             void* ret = allocate(size);
 
-            if( unlikely(ret==nullptr) )
+            if( llmalloc_unlikely(ret==nullptr) )
             {
                 handle_operator_new_failure();
             }
@@ -4499,7 +4477,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
 
             if (ret != nullptr)
             {
-                builtin_memset(ret, 0, total_size);
+                llmalloc_builtin_memset(ret, 0, total_size);
             }
 
             return ret;
@@ -4529,7 +4507,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
 
             if (new_ptr != nullptr)
             {
-                builtin_memcpy(new_ptr, ptr, old_size);
+                llmalloc_builtin_memcpy(new_ptr, ptr, old_size);
                 deallocate(ptr);
             }
 
@@ -4543,7 +4521,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
 
             if(ret != nullptr)
             {
-                builtin_memset(ret, 0, total_size);
+                llmalloc_builtin_memset(ret, 0, total_size);
             }
 
             return ret;
@@ -4553,7 +4531,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
         {
             void* ret = allocate_aligned(size, alignment);
 
-            if( unlikely(ret==nullptr) )
+            if( llmalloc_unlikely(ret==nullptr) )
             {
                 handle_operator_new_failure();
             }
@@ -4586,7 +4564,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
             if (new_ptr != nullptr)
             {
 
-                builtin_memcpy(new_ptr, ptr, old_size);
+                llmalloc_builtin_memcpy(new_ptr, ptr, old_size);
                 deallocate(ptr);
             }
 
@@ -4628,7 +4606,7 @@ void llmalloc_initialise()
 #endif
 
 // ALL REPLACEMENTS WILL BE DIRECTED TO FUNCTIONS BELOW
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 void* llmalloc_malloc(std::size_t size)
 {
     #ifndef DISABLE_OVERRIDE_AUTO_INITIALISATIONS
@@ -4637,7 +4615,7 @@ void* llmalloc_malloc(std::size_t size)
     return llmalloc::ScalableMalloc::get_instance().allocate(size);
 }
 
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 void* llmalloc_aligned_malloc(std::size_t size, std::size_t alignment)
 {
     #ifndef DISABLE_OVERRIDE_AUTO_INITIALISATIONS
@@ -4646,7 +4624,7 @@ void* llmalloc_aligned_malloc(std::size_t size, std::size_t alignment)
     return llmalloc::ScalableMalloc::get_instance().allocate_aligned(size, alignment);
 }
 
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 void* llmalloc_operator_new(std::size_t size)
 {
     #ifndef DISABLE_OVERRIDE_AUTO_INITIALISATIONS
@@ -4655,7 +4633,7 @@ void* llmalloc_operator_new(std::size_t size)
     return llmalloc::ScalableMalloc::get_instance().operator_new(size);
 }
 
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 void* llmalloc_operator_new_aligned(std::size_t size, std::size_t alignment)
 {
     #ifndef DISABLE_OVERRIDE_AUTO_INITIALISATIONS
@@ -4664,13 +4642,13 @@ void* llmalloc_operator_new_aligned(std::size_t size, std::size_t alignment)
     return llmalloc::ScalableMalloc::get_instance().operator_new_aligned(size, alignment);
 }
 
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 void llmalloc_free(void* ptr)
 {
     return llmalloc::ScalableMalloc::get_instance().deallocate(ptr);
 }
 
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 void* llmalloc_calloc(std::size_t num, std::size_t size)
 {
     #ifndef DISABLE_OVERRIDE_AUTO_INITIALISATIONS
@@ -4679,7 +4657,7 @@ void* llmalloc_calloc(std::size_t num, std::size_t size)
     return llmalloc::ScalableMalloc::get_instance().allocate_and_zero_memory(num, size);
 }
 
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 void* llmalloc_realloc(void* ptr, std::size_t size)
 {
     #ifndef DISABLE_OVERRIDE_AUTO_INITIALISATIONS
@@ -4688,13 +4666,13 @@ void* llmalloc_realloc(void* ptr, std::size_t size)
     return llmalloc::ScalableMalloc::get_instance().reallocate(ptr, size);
 }
 
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 std::size_t llmalloc_usable_size(void* ptr)
 {
     return llmalloc::ScalableMalloc::get_instance().get_usable_size(ptr);
 }
 
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 void* llmalloc_aligned_realloc(void* ptr, std::size_t size, std::size_t alignment)
 {
     #ifndef DISABLE_OVERRIDE_AUTO_INITIALISATIONS
@@ -4777,7 +4755,7 @@ char *llmalloc_strdup(const char *s)
 
     if (new_str != nullptr)
     {
-        builtin_memcpy(new_str, s, size);
+        llmalloc_builtin_memcpy(new_str, s, size);
         new_str[size] = '\0';
     }
 
@@ -4791,7 +4769,7 @@ char *llmalloc_strndup(const char *s, size_t n)
 
     if (new_str != nullptr)
     {
-        builtin_memcpy(new_str, s, size);
+        llmalloc_builtin_memcpy(new_str, s, size);
         new_str[size] = '\0';
     }
 
@@ -4912,7 +4890,7 @@ void* operator new(std::size_t size, std::align_val_t alignment)
 
 void operator delete(void* ptr, std::align_val_t alignment) noexcept
 {
-    UNUSED(alignment);
+    LLMALLOC_UNUSED(alignment);
     llmalloc_free(ptr);
 }
 
@@ -4923,7 +4901,7 @@ void* operator new[](std::size_t size, std::align_val_t alignment)
 
 void operator delete[](void* ptr, std::align_val_t alignment) noexcept
 {
-    UNUSED(alignment);
+    LLMALLOC_UNUSED(alignment);
     llmalloc_free(ptr);
 }
 
@@ -4943,13 +4921,13 @@ void* operator new[](std::size_t size, std::size_t alignment)
 // WITH ALIGNMENT and std::nothrow_t
 void* operator new(std::size_t size, std::align_val_t alignment, const std::nothrow_t& tag) noexcept
 {
-    UNUSED(tag);
+    LLMALLOC_UNUSED(tag);
     return llmalloc_aligned_malloc(size, static_cast<std::size_t>(alignment));
 }
 
 void* operator new[](std::size_t size, std::align_val_t alignment, const std::nothrow_t& tag) noexcept
 {
-    UNUSED(tag);
+    LLMALLOC_UNUSED(tag);
     return llmalloc_aligned_malloc(size, static_cast<std::size_t>(alignment));
 }
 
@@ -4967,13 +4945,13 @@ void operator delete[](void* ptr, std::align_val_t, const std::nothrow_t &) noex
 // WITH ALIGNMENT and std::nothrow_t & std::size_t alignment not std::align_val_t
 void* operator new(std::size_t size, std::size_t alignment, const std::nothrow_t& tag) noexcept
 {
-    UNUSED(tag);
+    LLMALLOC_UNUSED(tag);
     return llmalloc_aligned_malloc(size, alignment);
 }
 
 void* operator new[](std::size_t size, std::size_t alignment, const std::nothrow_t& tag) noexcept
 {
-    UNUSED(tag);
+    LLMALLOC_UNUSED(tag);
     return llmalloc_aligned_malloc(size, alignment);
 }
 
@@ -4991,45 +4969,44 @@ void operator delete[](void* ptr, std::size_t, const std::nothrow_t &) noexcept
 // DELETES WITH SIZES
 void operator delete(void* ptr, std::size_t size) noexcept
 {
-    UNUSED(size);
+    LLMALLOC_UNUSED(size);
     llmalloc_free(ptr);
 }
 
 void operator delete[](void* ptr, std::size_t size) noexcept
 {
-    UNUSED(size);
+    LLMALLOC_UNUSED(size);
     llmalloc_free(ptr);
 }
 
 void operator delete(void* ptr, std::size_t size, std::align_val_t align) noexcept
 {
-    UNUSED(size);
-    UNUSED(align);
+    LLMALLOC_UNUSED(size);
+    LLMALLOC_UNUSED(align);
     llmalloc_free(ptr);
 }
 
 void operator delete[](void* ptr, std::size_t size, std::align_val_t align) noexcept
 {
-    UNUSED(size);
-    UNUSED(align);
+    LLMALLOC_UNUSED(size);
+    LLMALLOC_UNUSED(align);
     llmalloc_free(ptr);
 }
 
 void operator delete(void* ptr, std::size_t size, std::size_t align) noexcept
 {
-    UNUSED(size);
-    UNUSED(align);
+    LLMALLOC_UNUSED(size);
+    LLMALLOC_UNUSED(align);
     llmalloc_free(ptr);
 }
 
 void operator delete[](void* ptr, std::size_t size, std::size_t align) noexcept
 {
-    UNUSED(size);
-    UNUSED(align);
+    LLMALLOC_UNUSED(size);
+    LLMALLOC_UNUSED(align);
     llmalloc_free(ptr);
 }
 
 #endif
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 #endif

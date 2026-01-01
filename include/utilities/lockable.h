@@ -1,5 +1,4 @@
-#ifndef _LOCKABLE_H_
-#define _LOCKABLE_H_
+#pragma once
 
 #include <type_traits>
 #include "../cpu/alignment_constants.h"
@@ -47,5 +46,3 @@ public:
 private:
     LockType m_lock;
 };
-
-#endif

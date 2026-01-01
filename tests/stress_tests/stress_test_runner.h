@@ -131,7 +131,7 @@ class StressTestRunner
                                 // Access all the bytes
                                 if (allocation_size <= options.max_size_for_data_verifications)
                                 {
-                                    builtin_memset(ptr, 'x', allocation_size);
+                                    llmalloc_builtin_memset(ptr, 'x', allocation_size);
                                 }
 
                                 register_pointer(ptr, thread_index, allocation_size);

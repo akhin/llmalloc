@@ -1,5 +1,4 @@
-#ifndef _ALIGNMENT_AND_SIZE_UTILS_H_
-#define _ALIGNMENT_AND_SIZE_UTILS_H_
+#pragma once
 
 #include <cassert>
 #include <cstdint>
@@ -45,5 +44,3 @@ class AlignmentAndSizeUtils
             return ((input + multiple - 1) & ~(multiple - 1));
         }
 };
-
-#endif

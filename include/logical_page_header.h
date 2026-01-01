@@ -6,8 +6,7 @@
                             size: 64, cachelines: 1, members: 10
                             last cacheline: 64 bytes
 */
-#ifndef _LOGICAL_PAGE_HEADER_H_
-#define _LOGICAL_PAGE_HEADER_H_
+#pragma once
 
 #include <cstdint>
 #include "compiler/packed.h"
@@ -17,7 +16,7 @@ enum class LogicalPageHeaderFlags : uint16_t
     IS_USED = 0x0001
 };
 
-PACKED
+LLMALLOC_PACKED
 (
     struct LogicalPageHeader // No privates , member initialisers, ctors or dtors to stay as PACKED+POD
     {
@@ -78,5 +77,3 @@ PACKED
         }
     }
 );
-
-#endif

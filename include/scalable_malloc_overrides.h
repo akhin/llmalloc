@@ -1,5 +1,4 @@
-#ifndef _SCALABLE_MALLOC_OVERRIDES_H_
-#define _SCALABLE_MALLOC_OVERRIDES_H_
+#pragma once
 
 #ifdef __linux__ // VOLTRON_EXCLUDE
 #include <cstring>
@@ -39,7 +38,7 @@ void llmalloc_initialise()
 #endif
 
 // ALL REPLACEMENTS WILL BE DIRECTED TO FUNCTIONS BELOW
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 void* llmalloc_malloc(std::size_t size)
 {
     #ifndef DISABLE_OVERRIDE_AUTO_INITIALISATIONS
@@ -48,7 +47,7 @@ void* llmalloc_malloc(std::size_t size)
     return llmalloc::ScalableMalloc::get_instance().allocate(size);
 }
 
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 void* llmalloc_aligned_malloc(std::size_t size, std::size_t alignment)
 {
     #ifndef DISABLE_OVERRIDE_AUTO_INITIALISATIONS
@@ -57,7 +56,7 @@ void* llmalloc_aligned_malloc(std::size_t size, std::size_t alignment)
     return llmalloc::ScalableMalloc::get_instance().allocate_aligned(size, alignment);
 }
 
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 void* llmalloc_operator_new(std::size_t size)
 {
     #ifndef DISABLE_OVERRIDE_AUTO_INITIALISATIONS
@@ -66,7 +65,7 @@ void* llmalloc_operator_new(std::size_t size)
     return llmalloc::ScalableMalloc::get_instance().operator_new(size);
 }
 
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 void* llmalloc_operator_new_aligned(std::size_t size, std::size_t alignment)
 {
     #ifndef DISABLE_OVERRIDE_AUTO_INITIALISATIONS
@@ -75,13 +74,13 @@ void* llmalloc_operator_new_aligned(std::size_t size, std::size_t alignment)
     return llmalloc::ScalableMalloc::get_instance().operator_new_aligned(size, alignment);
 }
 
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 void llmalloc_free(void* ptr)
 {
     return llmalloc::ScalableMalloc::get_instance().deallocate(ptr);
 }
 
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 void* llmalloc_calloc(std::size_t num, std::size_t size)
 {
     #ifndef DISABLE_OVERRIDE_AUTO_INITIALISATIONS
@@ -90,7 +89,7 @@ void* llmalloc_calloc(std::size_t num, std::size_t size)
     return llmalloc::ScalableMalloc::get_instance().allocate_and_zero_memory(num, size);
 }
 
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 void* llmalloc_realloc(void* ptr, std::size_t size)
 {
     #ifndef DISABLE_OVERRIDE_AUTO_INITIALISATIONS
@@ -99,13 +98,13 @@ void* llmalloc_realloc(void* ptr, std::size_t size)
     return llmalloc::ScalableMalloc::get_instance().reallocate(ptr, size);
 }
 
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 std::size_t llmalloc_usable_size(void* ptr)
 {
     return llmalloc::ScalableMalloc::get_instance().get_usable_size(ptr);
 }
 
-ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
+LLMALLOC_ALIGN_CODE(llmalloc::AlignmentConstants::CPU_CACHE_LINE_SIZE)
 void* llmalloc_aligned_realloc(void* ptr, std::size_t size, std::size_t alignment)
 {
     #ifndef DISABLE_OVERRIDE_AUTO_INITIALISATIONS
@@ -188,7 +187,7 @@ char *llmalloc_strdup(const char *s)
 
     if (new_str != nullptr)
     {
-        builtin_memcpy(new_str, s, size);
+        llmalloc_builtin_memcpy(new_str, s, size);
         new_str[size] = '\0';
     }
 
@@ -202,7 +201,7 @@ char *llmalloc_strndup(const char *s, size_t n)
 
     if (new_str != nullptr)
     {
-        builtin_memcpy(new_str, s, size);
+        llmalloc_builtin_memcpy(new_str, s, size);
         new_str[size] = '\0';
     }
 
@@ -323,7 +322,7 @@ void* operator new(std::size_t size, std::align_val_t alignment)
 
 void operator delete(void* ptr, std::align_val_t alignment) noexcept
 {
-    UNUSED(alignment);
+    LLMALLOC_UNUSED(alignment);
     llmalloc_free(ptr);
 }
 
@@ -334,7 +333,7 @@ void* operator new[](std::size_t size, std::align_val_t alignment)
 
 void operator delete[](void* ptr, std::align_val_t alignment) noexcept
 {
-    UNUSED(alignment);
+    LLMALLOC_UNUSED(alignment);
     llmalloc_free(ptr);
 }
 
@@ -354,13 +353,13 @@ void* operator new[](std::size_t size, std::size_t alignment)
 // WITH ALIGNMENT and std::nothrow_t
 void* operator new(std::size_t size, std::align_val_t alignment, const std::nothrow_t& tag) noexcept
 {
-    UNUSED(tag);
+    LLMALLOC_UNUSED(tag);
     return llmalloc_aligned_malloc(size, static_cast<std::size_t>(alignment));
 }
 
 void* operator new[](std::size_t size, std::align_val_t alignment, const std::nothrow_t& tag) noexcept
 {
-    UNUSED(tag);
+    LLMALLOC_UNUSED(tag);
     return llmalloc_aligned_malloc(size, static_cast<std::size_t>(alignment));
 }
 
@@ -378,13 +377,13 @@ void operator delete[](void* ptr, std::align_val_t, const std::nothrow_t &) noex
 // WITH ALIGNMENT and std::nothrow_t & std::size_t alignment not std::align_val_t
 void* operator new(std::size_t size, std::size_t alignment, const std::nothrow_t& tag) noexcept
 {
-    UNUSED(tag);
+    LLMALLOC_UNUSED(tag);
     return llmalloc_aligned_malloc(size, alignment);
 }
 
 void* operator new[](std::size_t size, std::size_t alignment, const std::nothrow_t& tag) noexcept
 {
-    UNUSED(tag);
+    LLMALLOC_UNUSED(tag);
     return llmalloc_aligned_malloc(size, alignment);
 }
 
@@ -402,46 +401,44 @@ void operator delete[](void* ptr, std::size_t, const std::nothrow_t &) noexcept
 // DELETES WITH SIZES
 void operator delete(void* ptr, std::size_t size) noexcept
 {
-    UNUSED(size);
+    LLMALLOC_UNUSED(size);
     llmalloc_free(ptr);
 }
 
 void operator delete[](void* ptr, std::size_t size) noexcept
 {
-    UNUSED(size);
+    LLMALLOC_UNUSED(size);
     llmalloc_free(ptr);
 }
 
 void operator delete(void* ptr, std::size_t size, std::align_val_t align) noexcept
 {
-    UNUSED(size);
-    UNUSED(align);
+    LLMALLOC_UNUSED(size);
+    LLMALLOC_UNUSED(align);
     llmalloc_free(ptr);
 }
 
 void operator delete[](void* ptr, std::size_t size, std::align_val_t align) noexcept
 {
-    UNUSED(size);
-    UNUSED(align);
+    LLMALLOC_UNUSED(size);
+    LLMALLOC_UNUSED(align);
     llmalloc_free(ptr);
 }
 
 void operator delete(void* ptr, std::size_t size, std::size_t align) noexcept
 {
-    UNUSED(size);
-    UNUSED(align);
+    LLMALLOC_UNUSED(size);
+    LLMALLOC_UNUSED(align);
     llmalloc_free(ptr);
 }
 
 void operator delete[](void* ptr, std::size_t size, std::size_t align) noexcept
 {
-    UNUSED(size);
-    UNUSED(align);
+    LLMALLOC_UNUSED(size);
+    LLMALLOC_UNUSED(align);
     llmalloc_free(ptr);
 }
 
 #endif
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // VOLTRON_NAMESPACE_EXCLUSION_END
-
-#endif

@@ -7,8 +7,7 @@
                 static inline void yield()
 
 */
-#ifndef _THREAD_UTILITIES_H_
-#define _THREAD_UTILITIES_H_
+#pragma once
 
 #ifdef __linux__        // VOLTRON_EXCLUDE
 #include <pthread.h>
@@ -109,5 +108,3 @@ class ThreadUtilities
 
     private:
 };
-
-#endif

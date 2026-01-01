@@ -9,8 +9,7 @@
 
     - Does not support item removal & types with constructors with arguments
 */
-#ifndef _DICTIONARY_H_
-#define _DICTIONARY_H_
+#pragma once
 
 #include <cassert>
 #include <cstdlib>
@@ -54,7 +53,7 @@ class Dictionary
         {
             assert(m_table_size > 0 && m_node_cache != nullptr);
 
-            if (unlikely(m_item_count == m_table_size)) // Load factor 1 , we need to resize
+            if (llmalloc_unlikely(m_item_count == m_table_size)) // Load factor 1 , we need to resize
             {
                 if (grow(m_table_size * 2) == false)
                 {
@@ -162,7 +161,7 @@ class Dictionary
             for (std::size_t i = copy_count; i < size; i++)
             {
                 DictionaryNode* new_node = new (new_node_cache + i) DictionaryNode(); // Placement new
-                UNUSED(new_node);
+                LLMALLOC_UNUSED(new_node);
             }
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -178,7 +177,7 @@ class Dictionary
             return true;
         }
 
-        FORCE_INLINE std::size_t modulo_table_size(std::size_t input) const
+        LLMALLOC_FORCE_INLINE std::size_t modulo_table_size(std::size_t input) const
         {
             assert(m_table_size > 0);
             return input - (input / m_table_size) * m_table_size;
@@ -205,5 +204,3 @@ class Dictionary
             }
         }
 };
-
-#endif

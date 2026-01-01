@@ -142,7 +142,7 @@ int main(int argc, char* argv[])
                 ptr = PerThreadCachingAllocatorType::get_instance().allocate(allocation_size);
 
                 if (ptr == nullptr) { std::cout << "ALLOCATION FAILED !!!" << std::endl; return false; }
-                if (!validate_buffer(ptr, allocation_size)) { Console::console_output_with_colour(ConsoleColour::FG_RED, "ALLOCATION FAILED !!!\n"); }
+                if (!validate_buffer(ptr, allocation_size)) { Console::print_colour(ConsoleColour::FG_RED, "ALLOCATION FAILED !!!\n"); }
 
                 Allocation current_allocation;
                 current_allocation.ptr = ptr;
@@ -200,7 +200,7 @@ int main(int argc, char* argv[])
             for (auto& allocation : bucket)
             {
                 total_allocated_size += allocation.size_class;
-                if (allocation.allocated == false || allocation.ptr != nullptr) { Console::console_output_with_colour(ConsoleColour::FG_RED, "TEST FAILED !!!\n"); }
+                if (allocation.allocated == false || allocation.ptr != nullptr) { Console::print_colour(ConsoleColour::FG_RED, "TEST FAILED !!!\n"); }
             }
         }
 

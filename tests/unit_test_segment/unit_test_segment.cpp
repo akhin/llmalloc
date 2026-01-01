@@ -283,9 +283,9 @@ bool run_test(const std::string name, std::size_t logical_page_buffer_size, uint
         auto new_ptr2 = segment.allocate(size_class);
         auto new_ptr3 = segment.allocate(size_class);
 
-        UNUSED(new_ptr1);
-        UNUSED(new_ptr2);
-        UNUSED(new_ptr3);
+        LLMALLOC_UNUSED(new_ptr1);
+        LLMALLOC_UNUSED(new_ptr2);
+        LLMALLOC_UNUSED(new_ptr3);
     }
 
     // 1 MORE ALLOCATION TO TRIGGER GROW
@@ -293,7 +293,7 @@ bool run_test(const std::string name, std::size_t logical_page_buffer_size, uint
     unit_test.test_equals(logical_page_count, current_logical_page_count, name + " segment allocation", "logical page count before grow");
 
     auto latest_ptr = segment.allocate(size_class);
-    UNUSED(latest_ptr);
+    LLMALLOC_UNUSED(latest_ptr);
 
     current_logical_page_count = segment.get_logical_page_count();
     unit_test.test_equals(logical_page_count * 2, current_logical_page_count, name + " segment allocation", "logical page count after grow");

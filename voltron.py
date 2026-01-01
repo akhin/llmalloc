@@ -161,6 +161,7 @@ class Converter:
                 include_dependency = parts[1]
 
             target_file = self.source_root_path + actual_include
+            has_pragma_once = False
 
             if Utility.is_valid_file(target_file) is True:
 
@@ -168,6 +169,7 @@ class Converter:
                     content += "#ifdef " + include_dependency + "\n"
 
                 with open(target_file) as fp:
+                    content += "\n"
                     for line in fp:
 
                         if "// VOLTRON_EXCLUDE" in line:
@@ -180,8 +182,12 @@ class Converter:
 
                         if "#include" in line and has_voltron_include == False:
                             continue
-                            
+
                         if "using namespace" in line:
+                            continue
+
+                        if "#pragma once" in line:
+                            has_pragma_once = True
                             continue
 
                         if "_H_" in line and "#ifndef" in line:
@@ -203,12 +209,13 @@ class Converter:
 
                         content += line
 
-                # Remove the last line #endif from the file
-                lines = content.splitlines()
-                if len(lines) >= 1:
-                    lines = lines[:-1]
-                    content = "\n".join(lines)
-                content += "\n"
+                if has_pragma_once is False:
+                    # Remove the last line #endif from the file
+                    lines = content.splitlines()
+                    if len(lines) >= 1:
+                        lines = lines[:-1]
+                        content = "\n".join(lines)
+                    content += "\n"
             else:
                 errors += "Could not write " + target_file + "\n"
 

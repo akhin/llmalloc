@@ -1,6 +1,5 @@
 // NON THREAD SAFE ITEM QUEUE
-#ifndef _BOUNDED_QUEUE_H_
-#define _BOUNDED_QUEUE_H_
+#pragma once
 
 #include <cassert>
 #include <cstddef>
@@ -62,7 +61,7 @@ class SinglyLinkedList
         }
 
     private:
-        ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) SinglyLinkedListNode* m_head = nullptr;
+        LLMALLOC_ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) SinglyLinkedListNode* m_head = nullptr;
         std::size_t m_capacity = 0;
         std::size_t m_size = 0;
 };
@@ -130,10 +129,8 @@ class BoundedQueue
         }
     
     private:
-        ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) typename SinglyLinkedList<T>::SinglyLinkedListNode* m_head = nullptr;
+        LLMALLOC_ALIGN_DATA(AlignmentConstants::CPU_CACHE_LINE_SIZE) typename SinglyLinkedList<T>::SinglyLinkedListNode* m_head = nullptr;
         char* m_buffer = nullptr;
         std::size_t m_buffer_length = 0;
         SinglyLinkedList<T> m_freelist; // Underlying memory
 };
-
-#endif

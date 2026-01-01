@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <iostream>
 
 #include "../../include/utilities/alignment_and_size_utils.h"
 #include "../../include/arena.h"

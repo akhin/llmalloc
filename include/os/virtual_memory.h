@@ -22,9 +22,7 @@
 
             Also if on Linux , you need libnuma ( For ex : RHEL -> sudo yum install numactl-devel & Ubuntu -> sudo apt install libnuma-dev ) and -lnuma for GCC
 */
-
-#ifndef _VIRTUAL_MEMORY_H_
-#define _VIRTUAL_MEMORY_H_
+#pragma once
 
 //#define ENABLE_NUMA // VOLTRON_EXCLUDE
 
@@ -79,7 +77,7 @@ class VirtualMemory
         {
             bool ret{ false };
             #ifdef __linux__
-            if (get_minimum_huge_page_size() <= 0)
+            if (get_minimum_huge_page_size() == 0)
             {
                 ret = false;
             }
@@ -207,7 +205,7 @@ class VirtualMemory
                 }
             }
             #else
-            UNUSED(numa_node);
+            LLMALLOC_UNUSED(numa_node);
             #endif
 
             #elif _WIN32
@@ -219,7 +217,7 @@ class VirtualMemory
             }
 
             #ifndef ENABLE_NUMA
-            UNUSED(numa_node);
+            LLMALLOC_UNUSED(numa_node);
             ret = VirtualAlloc(hint_address, size, flags, PAGE_READWRITE);
             #else
             if(numa_node >= 0)
@@ -385,5 +383,3 @@ class VirtualMemory
         }
         #endif
 };
-
-#endif

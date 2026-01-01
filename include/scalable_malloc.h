@@ -1,5 +1,4 @@
-#ifndef _SCALABLE_MALLOC_H_
-#define _SCALABLE_MALLOC_H_
+#pragma once
 
 #include "compiler/hints_hot_code.h"
 #include "compiler/hints_branch_predictor.h"
@@ -89,7 +88,7 @@ struct ScalableMallocOptions
     }
 };
 
-PACKED
+LLMALLOC_PACKED
 (
     struct AllocationMetadata
     {
@@ -108,7 +107,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
         using ScalableMallocType = ScalableAllocator<CentralHeapType, LocalHeapType>;
         using HashmapType = MPMCDictionary<uint64_t, AllocationMetadata, typename ArenaType::MetadataAllocator>;
 
-        FORCE_INLINE static ScalableMalloc& get_instance()
+        LLMALLOC_FORCE_INLINE static ScalableMalloc& get_instance()
         {
             static ScalableMalloc instance;
             return instance;
@@ -180,22 +179,22 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
         }
 
         #ifndef USE_ALLOC_HEADERS
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate(std::size_t size)
         {
-            if (unlikely( size > m_max_allocation_size ))
+            if (llmalloc_unlikely( size > m_max_allocation_size ))
             {
                 return allocate_large_object(size);
             }
 
             void* ptr = ScalableMallocType::get_instance().allocate(size);
 
-            if(unlikely(size > m_max_small_object_size))
+            if(llmalloc_unlikely(size > m_max_small_object_size))
             {
                 register_unpadded_medium_object(ptr, size);
             }
 
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(ptr, AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ptr, AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
             return ptr;
         }
 
@@ -204,7 +203,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
         {
             auto ptr = VirtualMemory::allocate(size, false);
             m_non_small_and_aligned_objects_map.insert(reinterpret_cast<uint64_t>(ptr), { size, 0 });
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(ptr, AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ptr, AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
             return ptr;
         }
 
@@ -214,16 +213,16 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
             m_non_small_and_aligned_objects_map.insert(reinterpret_cast<uint64_t>(ptr), { size, 0 });
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void deallocate(void*ptr)
         {
-            if (unlikely(ptr == nullptr))
+            if (llmalloc_unlikely(ptr == nullptr))
             {
                 return;
             }
 
             AllocationMetadata metadata;
-            if (unlikely(m_non_small_and_aligned_objects_map.get(reinterpret_cast<uint64_t>(ptr), metadata)))
+            if (llmalloc_unlikely(m_non_small_and_aligned_objects_map.get(reinterpret_cast<uint64_t>(ptr), metadata)))
             {
                 deallocate_non_small_or_aligned_object(metadata, ptr);
                 return;
@@ -255,7 +254,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
         {
             AllocationMetadata metadata;
 
-            if (unlikely(m_non_small_and_aligned_objects_map.get( reinterpret_cast<uint64_t>(ptr), metadata)))
+            if (llmalloc_unlikely(m_non_small_and_aligned_objects_map.get( reinterpret_cast<uint64_t>(ptr), metadata)))
             {
                 return metadata.size;
             }
@@ -266,12 +265,12 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
             return size_class;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void* allocate_aligned(std::size_t size, std::size_t alignment)
         {
             std::size_t adjusted_size = size + alignment; // Adding padding bytes
             
-            if (unlikely( adjusted_size > m_max_allocation_size ))
+            if (llmalloc_unlikely( adjusted_size > m_max_allocation_size ))
             {
                 return allocate_aligned_large_object(adjusted_size, alignment);
             }
@@ -285,7 +284,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
 
             m_non_small_and_aligned_objects_map.insert(reinterpret_cast<uint64_t>(ret), {adjusted_size , offset});
 
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Aligned allocation failed to meet the alignment requirement.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Aligned allocation failed to meet the alignment requirement.");
             return ret;
         }
 
@@ -299,29 +298,29 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
 
             m_non_small_and_aligned_objects_map.insert(reinterpret_cast<uint64_t>(ret), { adjusted_size , offset });
 
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Aligned allocation failed to meet the alignment requirement.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Aligned allocation failed to meet the alignment requirement.");
 
             return ret;
         }
         #else
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate(std::size_t size)
         {
             auto adjusted_size = size + sizeof(AllocationMetadata);
 
-            if (unlikely( adjusted_size > m_max_allocation_size ))
+            if (llmalloc_unlikely( adjusted_size > m_max_allocation_size ))
             {
                 return allocate_large_object(adjusted_size);
             }
 
             char* header_address = reinterpret_cast<char*>(ScalableMallocType::get_instance().allocate(adjusted_size));
 
-            if(likely(header_address))
+            if(llmalloc_likely(header_address))
             {
                 reinterpret_cast<AllocationMetadata*>(header_address)->size = adjusted_size;
                 reinterpret_cast<AllocationMetadata*>(header_address)->padding_bytes = 0;
 
-                assert_msg(AlignmentAndSizeUtils::is_address_aligned(header_address + sizeof(AllocationMetadata), AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
+                llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(header_address + sizeof(AllocationMetadata), AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
                 return  header_address + sizeof(AllocationMetadata);
             }
             else
@@ -334,11 +333,11 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
         void* allocate_large_object(std::size_t adjusted_size)
         {
             auto header_address = reinterpret_cast<char*>(VirtualMemory::allocate(adjusted_size, false));
-            if(likely(header_address))
+            if(llmalloc_likely(header_address))
             {
                 reinterpret_cast<AllocationMetadata*>(header_address)->size = adjusted_size;
                 reinterpret_cast<AllocationMetadata*>(header_address)->padding_bytes = 0;
-                assert_msg(AlignmentAndSizeUtils::is_address_aligned(header_address + sizeof(AllocationMetadata), AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
+                llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(header_address + sizeof(AllocationMetadata), AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
                 return header_address + sizeof(AllocationMetadata);
             }
             else
@@ -347,10 +346,10 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
             }
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void deallocate(void* ptr)
         {
-            if (unlikely(ptr == nullptr))
+            if (llmalloc_unlikely(ptr == nullptr))
             {
                 return;
             }
@@ -359,7 +358,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
             auto size = reinterpret_cast<AllocationMetadata*>(header_address)->size;
             auto orig_ptr = header_address - reinterpret_cast<AllocationMetadata*>(header_address)->padding_bytes;
 
-            if(likely(size <= m_max_small_object_size))
+            if(llmalloc_likely(size <= m_max_small_object_size))
             {
                 ScalableMallocType::get_instance().deallocate(orig_ptr, true);
             }
@@ -379,19 +378,19 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
             return reinterpret_cast<AllocationMetadata*>(header_address)->size - sizeof(AllocationMetadata);
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void* allocate_aligned(std::size_t size, std::size_t alignment)
         {
             std::size_t adjusted_size = size + sizeof(AllocationMetadata) + alignment; // Adding padding bytes
 
-            if (unlikely( adjusted_size > m_max_allocation_size ))
+            if (llmalloc_unlikely( adjusted_size > m_max_allocation_size ))
             {
                 return allocate_aligned_large_object(adjusted_size, alignment);
             }
 
             auto base = ScalableMallocType::get_instance().allocate(adjusted_size);
 
-            if(likely(base))
+            if(llmalloc_likely(base))
             {
                 uint64_t base_with_header = reinterpret_cast<std::uint64_t>(base) + sizeof(AllocationMetadata);
                 std::size_t remainder = base_with_header - ( (base_with_header / alignment) * alignment);
@@ -403,7 +402,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
                 reinterpret_cast<AllocationMetadata*>(header_address)->size = adjusted_size;
                 reinterpret_cast<AllocationMetadata*>(header_address)->padding_bytes = offset;
 
-                assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Aligned allocation failed to meet the alignment requirement.");
+                llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Aligned allocation failed to meet the alignment requirement.");
                 return ret;
             }
             else
@@ -417,7 +416,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
         {
             auto base = VirtualMemory::allocate(adjusted_size, false);
 
-            if(likely(base))
+            if(llmalloc_likely(base))
             {
                 uint64_t base_with_header = reinterpret_cast<std::uint64_t>(base) + sizeof(AllocationMetadata);
                 std::size_t remainder = base_with_header - ((base_with_header / alignment) * alignment);
@@ -429,7 +428,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
                 reinterpret_cast<AllocationMetadata*>(header_address)->size = adjusted_size;
                 reinterpret_cast<AllocationMetadata*>(header_address)->padding_bytes = offset;
 
-                assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Aligned allocation failed to meet the alignment requirement.");
+                llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Aligned allocation failed to meet the alignment requirement.");
 
                 return ret;
             }
@@ -445,7 +444,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
         {
             void* ret = allocate(size);
 
-            if( unlikely(ret==nullptr) )
+            if( llmalloc_unlikely(ret==nullptr) )
             {
                 handle_operator_new_failure();
             }
@@ -480,7 +479,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
 
             if (ret != nullptr)
             {
-                builtin_memset(ret, 0, total_size);
+                llmalloc_builtin_memset(ret, 0, total_size);
             }
 
             return ret;
@@ -510,7 +509,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
 
             if (new_ptr != nullptr)
             {
-                builtin_memcpy(new_ptr, ptr, old_size);
+                llmalloc_builtin_memcpy(new_ptr, ptr, old_size);
                 deallocate(ptr);
             }
 
@@ -524,7 +523,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
 
             if(ret != nullptr)
             {
-                builtin_memset(ret, 0, total_size);
+                llmalloc_builtin_memset(ret, 0, total_size);
             }
 
             return ret;
@@ -534,7 +533,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
         {
             void* ret = allocate_aligned(size, alignment);
 
-            if( unlikely(ret==nullptr) )
+            if( llmalloc_unlikely(ret==nullptr) )
             {
                 handle_operator_new_failure();
             }
@@ -567,7 +566,7 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
             if (new_ptr != nullptr)
             {
 
-                builtin_memcpy(new_ptr, ptr, old_size);
+                llmalloc_builtin_memcpy(new_ptr, ptr, old_size);
                 deallocate(ptr);
             }
 
@@ -583,5 +582,3 @@ class ScalableMalloc : public Lockable<LockPolicy::USERSPACE_LOCK>
         std::size_t m_max_allocation_size = 0;
         std::size_t m_max_small_object_size = 0;
 };
-
-#endif

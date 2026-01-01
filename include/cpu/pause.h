@@ -1,5 +1,4 @@
-#ifndef _PAUSE_H_
-#define _PAUSE_H_
+#pragma once
 
 #include <cstdint>
 
@@ -35,5 +34,3 @@ inline void pause(uint16_t repeat_count=100)
     }
     #endif
 }
-
-#endif

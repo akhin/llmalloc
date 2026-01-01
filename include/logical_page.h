@@ -4,8 +4,7 @@
     - IF THE PASSED BUFFER IS START OF A VIRTUAL PAGE AND THE PASSED SIZE IS A VM PAGE SIZE , THEN IT WILL BE CORRESPONDING TO AN ACTUAL VM PAGE
       IDEAL USE CASE IS ITS CORRESPONDING TO A VM PAGE / BEING VM PAGE ALIGNED. SO THAT A SINGLE PAYLOAD WILL NOT SPREAD TO DIFFERENT VM PAGES.
 */
-#ifndef _LOGICAL_PAGE_H_
-#define _LOGICAL_PAGE_H_
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -27,7 +26,7 @@ class LogicalPage
 {
     public:
         
-        PACKED
+        LLMALLOC_PACKED
         (
             struct LogicalPageNode      // No private members/method to stay as POD+PACKED
             {
@@ -62,8 +61,8 @@ class LogicalPage
             #ifndef UNIT_TEST
             // Segment should place us to a start of aligned vm page + size of header
             void* buffer_start_including_header = reinterpret_cast<void*>(reinterpret_cast<std::size_t>(buffer) - sizeof(*this));
-            assert_msg(AlignmentAndSizeUtils::is_address_page_allocation_granularity_aligned(buffer_start_including_header) == true, "LogicalPage : Segments or heaps should pass buffers which are aligned to OS page allocation granularity.");
-            UNUSED(buffer_start_including_header);
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_page_allocation_granularity_aligned(buffer_start_including_header) == true, "LogicalPage : Segments or heaps should pass buffers which are aligned to OS page allocation granularity.");
+            LLMALLOC_UNUSED(buffer_start_including_header);
             #endif
 
             this->m_page_header.initialise();
@@ -76,14 +75,14 @@ class LogicalPage
             return true;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate(const std::size_t size)
         {
-            UNUSED(size); 
+            LLMALLOC_UNUSED(size);
 
             NodeType* free_node = pop();
 
-            if (unlikely(free_node == nullptr))
+            if (llmalloc_unlikely(free_node == nullptr))
             {
                 return nullptr;
             }
@@ -93,7 +92,7 @@ class LogicalPage
             return  reinterpret_cast<void*>(free_node);
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void deallocate(void* ptr)
         {
             this->m_page_header.m_used_size -= this->m_page_header.m_size_class;
@@ -102,7 +101,7 @@ class LogicalPage
 
         std::size_t get_usable_size(void* ptr) 
         { 
-            UNUSED(ptr);
+            LLMALLOC_UNUSED(ptr);
             return  static_cast<std::size_t>(this->m_page_header.m_size_class); 
         }
 
@@ -142,15 +141,15 @@ class LogicalPage
             }
         }
 
-        FORCE_INLINE void push(NodeType* new_node)
+        LLMALLOC_FORCE_INLINE void push(NodeType* new_node)
         {
             new_node->m_next = reinterpret_cast<NodeType*>(this->m_page_header.m_head);
             this->m_page_header.m_head = reinterpret_cast<uint64_t>(new_node);
         }
 
-        FORCE_INLINE NodeType* pop()
+        LLMALLOC_FORCE_INLINE NodeType* pop()
         {
-            if(unlikely(this->m_page_header.m_head == 0))
+            if(llmalloc_unlikely(this->m_page_header.m_head == 0))
             {
                 return nullptr;
             }
@@ -160,5 +159,3 @@ class LogicalPage
             return top;
         }
 };
-
-#endif

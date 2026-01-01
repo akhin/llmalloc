@@ -1,6 +1,5 @@
 // INTERFACE WRAPPER FOR THREAD CACHING MEMORY POOL
-#ifndef _SCALABLE_POOL_H_
-#define _SCALABLE_POOL_H_
+#pragma once
 
 #include <cstddef>
 
@@ -131,16 +130,16 @@ class ScalablePool
             return ScalableMemoryPool::get_instance().create(central_heap_params, local_heap_params, arena_options);
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate()
         {
             return ScalableMemoryPool::get_instance().allocate(sizeof(T));
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void deallocate(void*ptr)
         {
-            if (unlikely(ptr == nullptr))
+            if (llmalloc_unlikely(ptr == nullptr))
             {
                 return;
             }
@@ -148,5 +147,3 @@ class ScalablePool
             ScalableMemoryPool::get_instance().deallocate(ptr);
         }
 };
-
-#endif

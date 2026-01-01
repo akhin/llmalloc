@@ -7,8 +7,7 @@
       However unlike ScalableMalloc, SingleThreadedAllocator supports only 16 byte alignments currently to keep its code simple.
       Therefore llmalloc::PMRResource is off by default. To enable it : -DENABLE_PMR/#define ENABLE_PMR
 */
-#ifndef _SINGLE_THREADED_ALLOCATOR_H_
-#define _SINGLE_THREADED_ALLOCATOR_H_
+#pragma once
 
 #include <cstdint>
 #include <cstddef>
@@ -59,7 +58,7 @@ class SingleThreadedAllocator
 
         static inline constexpr std::size_t MAX_SUPPORTED_ALIGNMENT = 16;
 
-        FORCE_INLINE  static SingleThreadedAllocator& get_instance()
+        LLMALLOC_FORCE_INLINE  static SingleThreadedAllocator& get_instance()
         {
             static SingleThreadedAllocator instance;
             return instance;
@@ -118,22 +117,22 @@ class SingleThreadedAllocator
             return true;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate(std::size_t size)
         {
-            if (unlikely( size > m_max_allocation_size ))
+            if (llmalloc_unlikely( size > m_max_allocation_size ))
             {
                 return allocate_large_object(size);
             }
 
             void* ptr = m_heap.allocate(size);
 
-            if(unlikely(size > m_max_small_object_size))
+            if(llmalloc_unlikely(size > m_max_small_object_size))
             {
                 register_medium_object(ptr, size);
             }
     
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(ptr, AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ptr, AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
             return ptr;
         }
         
@@ -142,7 +141,7 @@ class SingleThreadedAllocator
         {
             auto ptr = VirtualMemory::allocate(size, false);
             m_non_small_objects_hash_map.insert(reinterpret_cast<uint64_t>(ptr), size);
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(ptr, AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ptr, AlignmentAndSizeUtils::CPP_DEFAULT_ALLOCATION_ALIGNMENT), "Allocation address should be aligned to at least 16 bytes.");
             return ptr;
         }
 
@@ -152,12 +151,12 @@ class SingleThreadedAllocator
             m_non_small_objects_hash_map.insert(reinterpret_cast<uint64_t>(ptr), size);
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void deallocate(void*ptr)
         {
             std::size_t medium_or_large_size{0};
 
-            if (unlikely( m_non_small_objects_hash_map.get( reinterpret_cast<uint64_t>(ptr), medium_or_large_size) ))
+            if (llmalloc_unlikely( m_non_small_objects_hash_map.get( reinterpret_cast<uint64_t>(ptr), medium_or_large_size) ))
             {
                 deallocate_medium_or_large_object(ptr, medium_or_large_size);
                 return;
@@ -200,7 +199,7 @@ class STLAllocator
         template <class U>
         STLAllocator(const STLAllocator<U>&) {}
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         T* allocate(const std::size_t n)
         {
             T* ret = reinterpret_cast<T*>(SingleThreadedAllocator::get_instance().allocate(n * sizeof(T)));
@@ -213,10 +212,10 @@ class STLAllocator
             return ret;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void deallocate(T* const p, const std::size_t n)
         {
-            UNUSED(n);
+            LLMALLOC_UNUSED(n);
             SingleThreadedAllocator::get_instance().deallocate(p);
         }
 
@@ -240,12 +239,12 @@ class PMRResource : public std::pmr::memory_resource
 {
     private : 
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* do_allocate(std::size_t bytes, std::size_t alignment) override 
         {
-            assert_msg(alignment <= SingleThreadedAllocator::MAX_SUPPORTED_ALIGNMENT, "llmalloc::PMRResource supports alignments up to 16 bytes only."); // Debug mode check
+            llmalloc_assert_msg(alignment <= SingleThreadedAllocator::MAX_SUPPORTED_ALIGNMENT, "llmalloc::PMRResource supports alignments up to 16 bytes only."); // Debug mode check
             
-            if(unlikely(alignment > SingleThreadedAllocator::MAX_SUPPORTED_ALIGNMENT)) // Release mode check
+            if(llmalloc_unlikely(alignment > SingleThreadedAllocator::MAX_SUPPORTED_ALIGNMENT)) // Release mode check
             {
                 throw std::bad_alloc();
             }
@@ -260,11 +259,11 @@ class PMRResource : public std::pmr::memory_resource
             return ptr;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void do_deallocate(void* p, std::size_t bytes, std::size_t alignment) override 
         {
-            UNUSED(bytes);
-            UNUSED(alignment);
+            LLMALLOC_UNUSED(bytes);
+            LLMALLOC_UNUSED(alignment);
             llmalloc::SingleThreadedAllocator::get_instance().deallocate(p);
         }
 
@@ -273,6 +272,4 @@ class PMRResource : public std::pmr::memory_resource
             return this == &other;
         }
 };
-#endif
-
 #endif

@@ -5,8 +5,7 @@
 
     - USES CONFIGURABLE METADATA ( DEFAULT 256KB ) TO STORE THREAD LOCAL HEAPS. ALSO INITIALLY USES 64KB METADATA TO STORE THE CENTRAL HEAP
 */
-#ifndef _SCALABLE_ALLOCATOR_H_
-#define _SCALABLE_ALLOCATOR_H_
+#pragma once
 
 #include <atomic>
 #include <cstddef>
@@ -36,7 +35,7 @@ public:
 
     // THIS CLASS IS INTENDED TO BE USED DIRECTLY IN MALLOC REPLACEMENTS
     // SINCE THIS ONE IS A TEMPLATE CLASS , WE HAVE TO ENSURE A SINGLE ONLY STATIC VARIABLE INITIALISATION
-    FORCE_INLINE  static ScalableAllocator& get_instance()
+    LLMALLOC_FORCE_INLINE  static ScalableAllocator& get_instance()
     {
         static ScalableAllocator instance;
         return instance;
@@ -101,7 +100,7 @@ public:
     void set_enable_fast_shutdown(bool b) { m_fast_shutdown = b; }
     bool get_enable_fast_shutdown() const { return m_fast_shutdown; }
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+    LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
     void* allocate(const std::size_t size)
     {
         void* ret{ nullptr };
@@ -126,7 +125,7 @@ public:
         return ret;
     }
 
-    ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+    LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
     void deallocate(void* ptr, bool is_small_object = true)
     {
         bool returned_to_local_heap = false;
@@ -252,7 +251,7 @@ private:
         return get_thread_local_heap_internal();
     }
 
-    FORCE_INLINE LocalHeapType* get_thread_local_heap_internal()
+    LLMALLOC_FORCE_INLINE LocalHeapType* get_thread_local_heap_internal()
     {
         auto thread_local_heap = reinterpret_cast<LocalHeapType*>(ThreadLocalStorage::get_instance().get());
 
@@ -331,5 +330,3 @@ private:
         return local_heap;
     }
 };
-
-#endif

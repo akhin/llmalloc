@@ -8,8 +8,7 @@
     - LINUX ALLOCATION GRANULARITY IS 4KB (4096) , OTH IT IS 64KB ( 16 * 4096 ) ON WINDOWS .
       REGARDING WINDOWS PAGE ALLOCATION GRANULARITY : https://devblogs.microsoft.com/oldnewthing/20031008-00/?p=42223
 */
-#ifndef _ARENA_H_
-#define _ARENA_H_
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -98,14 +97,14 @@ class Arena : public Lockable<LockPolicy::USERSPACE_LOCK> // MAINTAINS A SHARED 
             //////////////////////////////////////////////////
             this->leave_concurrent_context();
 
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, m_page_alignment), "Arena should not return an address which is not aligned to its page alignment setting.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, m_page_alignment), "Arena should not return an address which is not aligned to its page alignment setting.");
 
             return ret;
         }
 
         [[nodiscard]] char* allocate_aligned(std::size_t size, std::size_t alignment)
         {
-            assert_msg(AlignmentAndSizeUtils::is_size_a_multiple_of_page_allocation_granularity(alignment), "Special alignment value requested from Arena should be a multiple of OS page allocation granularity.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_size_a_multiple_of_page_allocation_granularity(alignment), "Special alignment value requested from Arena should be a multiple of OS page allocation granularity.");
 
             if(alignment == m_page_alignment)
             {
@@ -113,7 +112,7 @@ class Arena : public Lockable<LockPolicy::USERSPACE_LOCK> // MAINTAINS A SHARED 
             }
             else
             {
-                assert_msg(AlignmentAndSizeUtils::is_size_a_multiple_of_page_allocation_granularity(m_page_alignment), "Special alignment value requested from Arena should be a multiple of Arena's page alignment value.");
+                llmalloc_assert_msg(AlignmentAndSizeUtils::is_size_a_multiple_of_page_allocation_granularity(m_page_alignment), "Special alignment value requested from Arena should be a multiple of Arena's page alignment value.");
 
                 auto ptr = reinterpret_cast<uint64_t>(allocate(size + alignment));
 
@@ -137,7 +136,7 @@ class Arena : public Lockable<LockPolicy::USERSPACE_LOCK> // MAINTAINS A SHARED 
             VirtualMemory::deallocate(address, size);
             #else
             auto release_success = VirtualMemory::deallocate(address, size);
-            assert_msg(release_success, "Failure to release pages can lead to system wide issues\n");
+            llmalloc_assert_msg(release_success, "Failure to release pages can lead to system wide issues\n");
             #endif
         }
 
@@ -151,8 +150,8 @@ class Arena : public Lockable<LockPolicy::USERSPACE_LOCK> // MAINTAINS A SHARED 
 
                 static void deallocate(void* address, std::size_t size)
                 {
-                    UNUSED(address);
-                    UNUSED(size);
+                    LLMALLOC_UNUSED(address);
+                    LLMALLOC_UNUSED(size);
                 }
         };
 
@@ -241,7 +240,7 @@ class Arena : public Lockable<LockPolicy::USERSPACE_LOCK> // MAINTAINS A SHARED 
             }
             auto ret = buffer + delta;
 
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Arena's overallocation to get an aligned virtual memory address failed.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(ret, alignment), "Arena's overallocation to get an aligned virtual memory address failed.");
 
             return ret;
         }
@@ -265,5 +264,3 @@ class Arena : public Lockable<LockPolicy::USERSPACE_LOCK> // MAINTAINS A SHARED 
             m_cache_buffer = nullptr;
         }
 };
-
-#endif

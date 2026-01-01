@@ -19,7 +19,7 @@
 
         ConcurrencyTestUtilities                        sleep_randomly_usecs  pin_calling_thread_randomly thread_safe_print set_calling_thread_name
         RandomNumberGenerator::get_random_integer       use it to get random integers
-        Console::console_output_with_colour             gives coloured output in consoles on Linux and Windows
+        Console::print_colour                           gives coloured output in consoles on Linux and Windows
 
 */
 #ifndef _UNIT_TEST_H_
@@ -37,7 +37,7 @@
 #include <random>
 #include <mutex>
 #include <type_traits>
-#include <iostream>
+#include <cstdio>
 
 #if __linux__
 #include <string.h>
@@ -74,18 +74,18 @@ class Console
 
         /*
             Currently not using C++20`s std::format since GCC support started from only v13.
-            After starting using it , can templatise console_output_with_colour method as below:
+            After starting using it , can templatise print_colour method as below:
 
                 #include <format>
                 #include <string_view>
 
                 template <typename... Args>
-                inline void console_output_with_colour(ConsoleColour foreground_colour, std::string_view message, Args&&... args)
+                inline void print_colour(ConsoleColour foreground_colour, std::string_view message, Args&&... args)
                 {
                     std::string buffer = std::vformat(message, std::make_format_args(args...));
                     ...
         */
-        static void console_output_with_colour(ConsoleColour foreground_colour, const std::string_view& buffer)
+        static void print_colour(ConsoleColour foreground_colour, const std::string_view& buffer)
         {
             auto fg_index = static_cast<std::underlying_type<ConsoleColour>::type>(foreground_colour);
             auto foreground_colour_code = NATIVE_CONSOLE_COLOURS[fg_index].value;
@@ -94,11 +94,14 @@ class Console
             auto set_console_attribute = [&handle_console](int code) { SetConsoleTextAttribute(handle_console, code);  };
             set_console_attribute(foreground_colour_code | FOREGROUND_INTENSITY);
             FlushConsoleInputBuffer(handle_console);
-            std::cout << buffer;
+            fwrite(buffer.data(), 1, buffer.size(), stdout);
             SetConsoleTextAttribute(handle_console, 15); //set back to black background and white text
             #elif __linux__
             std::string ansi_colour_code = "\033[0;" + std::to_string(foreground_colour_code) + "m";
-            std::cout << ansi_colour_code << buffer << "\033[0m";
+            fprintf(stdout, "%s", ansi_colour_code.c_str());
+            fwrite(buffer.data(), 1, buffer.size(), stdout);
+            fprintf(stdout, "\033[0m");
+            fflush(stdout);
             #endif
         }
 
@@ -180,7 +183,7 @@ class ConcurrencyTestUtilities
         static void thread_safe_print(const std::string_view& buffer, ConsoleColour foreground_colour = ConsoleColour::FG_YELLOW)
         {
             print_lock.lock();
-            Console::console_output_with_colour(foreground_colour, buffer);
+            Console::print_colour(foreground_colour, buffer);
             print_lock.unlock();
         }
 
@@ -270,7 +273,7 @@ class UnitTest
                 evaluation = (actual == static_cast<T>(expected));
             }
 
-            Console::console_output_with_colour(ConsoleColour::FG_YELLOW, "RUNNING: Category = " + test_category + " , Test case = " + test_case + '\n');
+            Console::print_colour(ConsoleColour::FG_YELLOW, "RUNNING: Category = " + test_category + " , Test case = " + test_case + '\n');
 
             std::stringstream stream_actual;
             stream_actual << actual;
@@ -283,11 +286,11 @@ class UnitTest
 
             if (evaluation)
             {
-                Console::console_output_with_colour(ConsoleColour::FG_GREEN, "SUCCESS : " + test_case_display.str() + '\n');
+                Console::print_colour(ConsoleColour::FG_GREEN, "SUCCESS : " + test_case_display.str() + '\n');
             }
             else
             {
-                Console::console_output_with_colour(ConsoleColour::FG_RED, "FAILURE : " + test_case_display.str() + '\n');
+                Console::print_colour(ConsoleColour::FG_RED, "FAILURE : " + test_case_display.str() + '\n');
             }
 
             return evaluation;
@@ -399,11 +402,11 @@ bool UnitTest::test_equals(const char* actual, const char* expected, const std::
 
     if (evaluation)
     {
-        Console::console_output_with_colour(ConsoleColour::FG_GREEN, "SUCCESS : " + test_case_display.str() + '\n');
+        Console::print_colour(ConsoleColour::FG_GREEN, "SUCCESS : " + test_case_display.str() + '\n');
     }
     else
     {
-        Console::console_output_with_colour(ConsoleColour::FG_RED, "FAILURE : " + test_case_display.str() + '\n');
+        Console::print_colour(ConsoleColour::FG_RED, "FAILURE : " + test_case_display.str() + '\n');
     }
 
     return evaluation;

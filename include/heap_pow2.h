@@ -1,5 +1,4 @@
-#ifndef _HEAP_POW2_H_
-#define _HEAP_POW2_H_
+#pragma once
 
 #include <array>
 #include <cassert>
@@ -82,7 +81,7 @@ class HeapPow2
         {
             //////////////////////////////////////////////////////////////////////////////////////////////
             // 1. CHECKS
-            assert_msg(arena, "Heap must receive a valid arena instance.");
+            llmalloc_assert_msg(arena, "Heap must receive a valid arena instance.");
 
             // Logical page sizes should be multiples of page allocation granularity ( 4KB on Linux ,64 KB on Windows )
             if (!AlignmentAndSizeUtils::is_size_a_multiple_of_page_allocation_granularity(params.small_object_logical_page_size))
@@ -121,11 +120,11 @@ class HeapPow2
             //////////////////////////////////////////////////////////////////////////////////////////////
             // 3. ALLOCATE BUFFERS
             auto small_objects_buffer_address = reinterpret_cast<uint64_t>(arena->allocate(small_objects_required_buffer_size));
-            assert_msg(AlignmentAndSizeUtils::is_address_page_allocation_granularity_aligned(reinterpret_cast<void*>(small_objects_buffer_address)), "HeapPow2: Arena failed to pass an address which is aligned to OS page allocation granularity.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_page_allocation_granularity_aligned(reinterpret_cast<void*>(small_objects_buffer_address)), "HeapPow2: Arena failed to pass an address which is aligned to OS page allocation granularity.");
 
             char* medium_objects_buffer_address = reinterpret_cast<char*>(arena->allocate_aligned(medium_objects_required_buffer_size, m_medium_object_logical_page_size));
-            assert_msg(AlignmentAndSizeUtils::is_address_page_allocation_granularity_aligned(reinterpret_cast<void*>(medium_objects_buffer_address)), "HeapPow2: Arena failed to pass an address which is aligned to OS page allocation granularity.");
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(reinterpret_cast<void*>(medium_objects_buffer_address), m_medium_object_logical_page_size), "HeapPow2: Failed to get an address which is aligned to medium objects page size.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_page_allocation_granularity_aligned(reinterpret_cast<void*>(medium_objects_buffer_address)), "HeapPow2: Arena failed to pass an address which is aligned to OS page allocation granularity.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(reinterpret_cast<void*>(medium_objects_buffer_address), m_medium_object_logical_page_size), "HeapPow2: Failed to get an address which is aligned to medium objects page size.");
 
             //////////////////////////////////////////////////////////////////////////////////////////////
             // 4. DISTRIBUTE BUFFER TO BINS ,  NEED TO PLACE LOGICAL PAGE HEADERS TO START OF PAGES !
@@ -202,7 +201,7 @@ class HeapPow2
             return true;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate(std::size_t size = 0)
         {
             size = size < MIN_SIZE_CLASS ? MIN_SIZE_CLASS : size;
@@ -211,7 +210,7 @@ class HeapPow2
 
             m_potential_pending_max_deallocation_count++;
 
-            if (unlikely(m_potential_pending_max_deallocation_count >= m_deallocation_queue_processing_threshold))
+            if (llmalloc_unlikely(m_potential_pending_max_deallocation_count >= m_deallocation_queue_processing_threshold))
             {
                 return allocate_by_processing_deallocation_queues(bin_index, size);
             }
@@ -232,7 +231,7 @@ class HeapPow2
         }
 
         // Slow path removal function
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void* allocate_by_processing_deallocation_queues(std::size_t bin_index, std::size_t size)
         {
             #ifdef ENABLE_PERF_TRACES
@@ -258,7 +257,7 @@ class HeapPow2
             return m_segments[bin_index].allocate(size);
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         bool deallocate(void* ptr, bool is_small_object)
         {
             auto logical_page_size = is_small_object ? m_small_object_logical_page_size : m_medium_object_logical_page_size;
@@ -266,7 +265,7 @@ class HeapPow2
 
             auto size_class = target_logical_page->get_size_class();
 
-            assert_msg(size_class >= MIN_SIZE_CLASS, "HeapPow2 deallocate : Found size class is invalid. The pointer may not have been allocated by this allocator.");
+            llmalloc_assert_msg(size_class >= MIN_SIZE_CLASS, "HeapPow2 deallocate : Found size class is invalid. The pointer may not have been allocated by this allocator.");
             
             auto bin_index = get_pow2_bin_index_from_size(size_class);
 
@@ -327,7 +326,7 @@ class HeapPow2
 
                 if (m_recyclable_deallocation_queues[bin_index].try_pop(pointer))
                 {
-                    if (likely(ret != nullptr))
+                    if (llmalloc_likely(ret != nullptr))
                     {
                         m_segments[bin_index].deallocate(reinterpret_cast<void*>(pointer));
                     }
@@ -346,13 +345,13 @@ class HeapPow2
         }
 
         // Reference : https://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
-        FORCE_INLINE std::size_t get_first_pow2_of(std::size_t input)
+        LLMALLOC_FORCE_INLINE std::size_t get_first_pow2_of(std::size_t input)
         {
             assert(input>= MIN_SIZE_CLASS);
 
             /* 
             No need for the if check below , as the caller will pass a miniumum of MIN_SIZE_CLASS which is > 1
-            if (unlikely(input <= 1))
+            if (llmalloc_unlikely(input <= 1))
             {
                 return 1;
             }
@@ -369,12 +368,10 @@ class HeapPow2
         }
 
         // IMPLEMENTATION IS FOR 64 BIT ONLY
-        FORCE_INLINE std::size_t get_pow2_bin_index_from_size(std::size_t size)
+        LLMALLOC_FORCE_INLINE std::size_t get_pow2_bin_index_from_size(std::size_t size)
         {
-            std::size_t index = static_cast<std::size_t>(63 - builtin_clzl(static_cast<unsigned long>(size))) - LOG2_MIN_SIZE_CLASS;
+            std::size_t index = static_cast<std::size_t>(63 - llmalloc_builtin_clzl(static_cast<unsigned long>(size))) - LOG2_MIN_SIZE_CLASS;
             index = index > MAX_BIN_INDEX ? MAX_BIN_INDEX : index;
             return index;
         }
 };
-
-#endif

@@ -27,16 +27,16 @@ int main()
     {
         ScalableMallocOptions options;
         options.numa_node = TARGET_NUMA_NODE_TO_BIND;
-        
+
         if(ScalableMalloc::get_instance().create(options) == false)
         {
             std::cout << "Creation failed\n";
             return -1;
         }
-        
+
         void* ptr = nullptr;
         ptr = ScalableMalloc::get_instance().allocate(42);
-        
+
         if(get_numa_node_of_address(ptr) != TARGET_NUMA_NODE_TO_BIND)
         {
             std::cout << "Address is not NUMA local NUMA pinning failed !\n";

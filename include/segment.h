@@ -5,8 +5,7 @@
      
     ! IMPORTANT : THE EXTERNAL BUFFER SHOULD BE ALIGNED TO LOGICAL PAGE SIZE. THAT IS CRITICAL FOR REACHING LOGICAL PAGE HEADERS
 */
-#ifndef _SEGMENT_H_
-#define _SEGMENT_H_
+#pragma once
 
 #include <cmath>
 #include <cstddef>
@@ -52,7 +51,7 @@ class Segment : public Lockable<lock_policy>
         Segment()
         {
             m_logical_page_object_size = sizeof(LogicalPageType);
-            assert_msg(m_logical_page_object_size == sizeof(LogicalPageHeader), "Segment: Logical page object size should not exceed logical page header size." );
+            llmalloc_assert_msg(m_logical_page_object_size == sizeof(LogicalPageHeader), "Segment: Logical page object size should not exceed logical page header size." );
 
             m_segment_id_counter++;
 
@@ -91,7 +90,7 @@ class Segment : public Lockable<lock_policy>
                 return false;
             }
 
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(external_buffer, params.m_logical_page_size) == true, "Segment: Passed buffer is not aligned to specified logical page size. This is a requirement to enable quick access to logical pages from pointers.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(external_buffer, params.m_logical_page_size) == true, "Segment: Passed buffer is not aligned to specified logical page size. This is a requirement to enable quick access to logical pages from pointers.");
 
             m_params = params;
             m_arena = arena_ptr;
@@ -104,7 +103,7 @@ class Segment : public Lockable<lock_policy>
             return true;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE) [[nodiscard]]
         void* allocate(std::size_t size = 0)
         {
             void* ret = nullptr;
@@ -135,19 +134,19 @@ class Segment : public Lockable<lock_policy>
             return ret;
         }
 
-        ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
+        LLMALLOC_ALIGN_CODE(AlignmentConstants::CPU_CACHE_LINE_SIZE)
         void deallocate(void* ptr)
         {
             if( m_head == nullptr ) { return;}
             auto affected = get_logical_page_from_address(ptr, m_params.m_logical_page_size);
-            assert_msg(affected->get_segment_id() == m_segment_id, "Deleted ptr's segment id should match this segment's id");
-            assert_msg(affected->get_usable_size(ptr) == m_params.m_size_class, "Deleted ptr's size class should match this segment's size class");
+            llmalloc_assert_msg(affected->get_segment_id() == m_segment_id, "Deleted ptr's segment id should match this segment's id");
+            llmalloc_assert_msg(affected->get_usable_size(ptr) == m_params.m_size_class, "Deleted ptr's size class should match this segment's size class");
 
             this->enter_concurrent_context(); // Locking only for central heap
 
             affected->deallocate(ptr);
 
-            if (unlikely(affected->get_used_size() == 0))
+            if (llmalloc_unlikely(affected->get_used_size() == 0))
             {
                 affected->mark_as_non_used();
 
@@ -206,7 +205,7 @@ class Segment : public Lockable<lock_policy>
             return target_logical_page->get_segment_id();
         }
 
-        FORCE_INLINE uint16_t get_id() const { return m_segment_id; }
+        LLMALLOC_FORCE_INLINE uint16_t get_id() const { return m_segment_id; }
         
         LogicalPageType* get_head_logical_page() { return m_head; }
 
@@ -229,7 +228,7 @@ class Segment : public Lockable<lock_policy>
         // Returns first logical page ptr of the grow
         [[nodiscard]] LogicalPageType* grow(char* buffer, std::size_t logical_page_count)
         {
-            assert_msg(AlignmentAndSizeUtils::is_address_aligned(buffer, m_params.m_logical_page_size), "Passed buffer to segment grow should be aligned to the logical page size.");
+            llmalloc_assert_msg(AlignmentAndSizeUtils::is_address_aligned(buffer, m_params.m_logical_page_size), "Passed buffer to segment grow should be aligned to the logical page size.");
             LogicalPageType* first_new_logical_page = nullptr;
             LogicalPageType* previous_page = m_tail;
             LogicalPageType* iter_page = nullptr;
@@ -255,7 +254,7 @@ class Segment : public Lockable<lock_policy>
             };
             /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
             // FIRST PAGE
-            if (unlikely(create_new_logical_page(buffer) == false))
+            if (llmalloc_unlikely(create_new_logical_page(buffer) == false))
             {
                 return nullptr;
             }
@@ -474,7 +473,7 @@ class Segment : public Lockable<lock_policy>
         {
             minimum_new_logical_page_count = get_required_page_count_for_allocation(m_params.m_logical_page_size, m_logical_page_object_size, m_params.m_size_class, size / m_params.m_size_class);
 
-            if ( likely(m_params.m_grow_coefficient > 0))
+            if ( llmalloc_likely(m_params.m_grow_coefficient > 0))
             {
                 desired_new_logical_page_count = static_cast<std::size_t>(m_logical_page_count * m_params.m_grow_coefficient);
 
@@ -502,5 +501,3 @@ class Segment : public Lockable<lock_policy>
             return needed_page_count;
         }
 };
-
-#endif

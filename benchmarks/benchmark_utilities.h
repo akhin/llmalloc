@@ -11,11 +11,9 @@ CLASSES:
 
         ASLR                                        disable_aslr_for_this_process , Linux only
 
-        MemoryStats                                 get_stats() & get_human_readible_size
-
         Statistics                                  Gives you min,max,average and percentiles : P50 P75 P90 P95 P99
 
-        Console                                     console_output_with_colour
+        Console                                     print_colour
 
         LinuxInfo                                   Linux kernel version & CPU Isolation info
 
@@ -250,18 +248,18 @@ class Console
 
         /*
             Currently not using C++20`s std::format since GCC support started from only v13.
-            After starting using it , can templatise console_output_with_colour method as below:
+            After starting using it , can templatise print_colour method as below:
 
                 #include <format>
                 #include <string_view>
 
                 template <typename... Args>
-                inline void console_output_with_colour(ConsoleColour foreground_colour, std::string_view message, Args&&... args)
+                inline void print_colour(ConsoleColour foreground_colour, std::string_view message, Args&&... args)
                 {
                     std::string buffer = std::vformat(message, std::make_format_args(args...));
                     ...
         */
-        static void console_output_with_colour(ConsoleColour foreground_colour, const std::string_view& buffer)
+        static void print_colour(ConsoleColour foreground_colour, const std::string_view& buffer)
         {
             auto fg_index = static_cast<std::underlying_type<ConsoleColour>::type>(foreground_colour);
             auto foreground_colour_code = NATIVE_CONSOLE_COLOURS[fg_index].value;
@@ -270,11 +268,14 @@ class Console
             auto set_console_attribute = [&handle_console](int code) { SetConsoleTextAttribute(handle_console, code);  };
             set_console_attribute(foreground_colour_code | FOREGROUND_INTENSITY);
             FlushConsoleInputBuffer(handle_console);
-            std::cout << buffer;
+            fwrite(buffer.data(), 1, buffer.size(), stdout);
             SetConsoleTextAttribute(handle_console, 15); //set back to black background and white text
             #elif __linux__
             std::string ansi_colour_code = "\033[0;" + std::to_string(foreground_colour_code) + "m";
-            std::cout << ansi_colour_code << buffer << "\033[0m";
+            fprintf(stdout, "%s", ansi_colour_code.c_str());
+            fwrite(buffer.data(), 1, buffer.size(), stdout);
+            fprintf(stdout, "\033[0m");
+            fflush(stdout);
             #endif
         }
 
@@ -372,7 +373,7 @@ class PMCUtilities
         {
             if(am_i_admin()==false)
             {
-                Console::console_output_with_colour(ConsoleColour::FG_RED, "You need admin rights to read PMC values. Please re-run as admin.\n");
+                Console::print_colour(ConsoleColour::FG_RED, "You need admin rights to read PMC values. Please re-run as admin.\n");
             }
 
             pmc_fd.fd_page_faults = setup_perf_event(PERF_TYPE_SOFTWARE, PERF_COUNT_SW_PAGE_FAULTS);
@@ -614,35 +615,35 @@ public:
     {
         std::cout << std::endl;
 
-        Console::console_output_with_colour(ConsoleColour::FG_BLUE, "Title : " + title);
+        Console::print_colour(ConsoleColour::FG_BLUE, "Title : " + title);
         std::cout << std::endl;
 
-        Console::console_output_with_colour(ConsoleColour::FG_GREEN, "Sample count : " + std::to_string(get_sample_count()));
+        Console::print_colour(ConsoleColour::FG_GREEN, "Sample count : " + std::to_string(get_sample_count()));
         std::cout << std::endl;
 
-        Console::console_output_with_colour(ConsoleColour::FG_YELLOW, "Minimum : ");
+        Console::print_colour(ConsoleColour::FG_YELLOW, "Minimum : ");
         std::cout << get_minimum() << " " << unit <<  std::endl;
 
-        Console::console_output_with_colour(ConsoleColour::FG_YELLOW, "Maximum : ");
+        Console::print_colour(ConsoleColour::FG_YELLOW, "Maximum : ");
         std::cout << get_maximum() << " " << unit << std::endl;
 
-        Console::console_output_with_colour(ConsoleColour::FG_YELLOW, "Average : ");
-        Console::console_output_with_colour(ConsoleColour::FG_RED, std::to_string(get_average()) + " " + unit);
+        Console::print_colour(ConsoleColour::FG_YELLOW, "Average : ");
+        Console::print_colour(ConsoleColour::FG_RED, std::to_string(get_average()) + " " + unit);
         std::cout << std::endl;
 
-        Console::console_output_with_colour(ConsoleColour::FG_YELLOW, "P50 : ");
+        Console::print_colour(ConsoleColour::FG_YELLOW, "P50 : ");
         std::cout << std::to_string(get_percentile(50)) << " " << unit << std::endl;
 
-        Console::console_output_with_colour(ConsoleColour::FG_YELLOW, "P75 : ");
+        Console::print_colour(ConsoleColour::FG_YELLOW, "P75 : ");
         std::cout << std::to_string(get_percentile(75)) << " " << unit << std::endl;
 
-        Console::console_output_with_colour(ConsoleColour::FG_YELLOW, "P90 : ");
+        Console::print_colour(ConsoleColour::FG_YELLOW, "P90 : ");
         std::cout << std::to_string(get_percentile(90)) << " " << unit << std::endl;
 
-        Console::console_output_with_colour(ConsoleColour::FG_YELLOW, "P95 : ");
+        Console::print_colour(ConsoleColour::FG_YELLOW, "P95 : ");
         std::cout << std::to_string(get_percentile(95)) << " " << unit << std::endl;
 
-        Console::console_output_with_colour(ConsoleColour::FG_YELLOW, "P99 : ");
+        Console::print_colour(ConsoleColour::FG_YELLOW, "P99 : ");
         std::cout << std::to_string(get_percentile(99)) << " " << unit << std::endl;
 
         std::cout << std::endl;
@@ -728,177 +729,6 @@ class ASLR
 };
 
 ///////////////////////////////////////////////////////////////////
-// Memory stats
-
-// Sizes are in bytes
-struct MemoryStatsCollection
-{
-    // Physical memory
-    std::size_t total_physical_memory_size = 0;
-    std::size_t physical_memory_current_usage = 0;
-    std::size_t physical_memory_peak_usage = 0;
-    // Virtual memory
-    std::size_t total_virtual_memory_size = 0;
-    std::size_t virtual_memory_current_usage = 0;
-    // Page faults
-    std::size_t hard_page_fault_count = 0;
-};
-
-class MemoryStats
-{
-    public:
-
-        static MemoryStatsCollection get_stats()
-        {
-            MemoryStatsCollection stats;
-            #ifdef __linux__
-            struct sysinfo mem_info;
-            sysinfo(&mem_info);
-            struct rusage rusage;
-            getrusage(RUSAGE_SELF, &rusage);
-
-            stats.total_physical_memory_size = static_cast<std::size_t>(mem_info.totalram);
-            stats.physical_memory_current_usage = static_cast<std::size_t>(get_physical_memory_current_usage());
-            stats.physical_memory_peak_usage = static_cast<std::size_t>(rusage.ru_maxrss * 1024);
-
-            stats.total_virtual_memory_size = static_cast<std::size_t>(mem_info.totalram+ mem_info.totalswap + mem_info.mem_unit);
-            stats.virtual_memory_current_usage = static_cast<std::size_t>(get_virtual_memory_current_usage());
-            stats.hard_page_fault_count = static_cast<std::size_t>(rusage.ru_majflt);
-
-            #elif _WIN32
-            MEMORYSTATUSEX mem_info;
-            mem_info.dwLength = sizeof(MEMORYSTATUSEX);
-            GlobalMemoryStatusEx(&mem_info);
-            PROCESS_MEMORY_COUNTERS_EX pmc;
-            GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc));
-
-            stats.total_physical_memory_size = static_cast<std::size_t>(mem_info.ullTotalPhys);
-            stats.physical_memory_current_usage = static_cast<std::size_t>(pmc.WorkingSetSize);
-            stats.physical_memory_peak_usage = static_cast<std::size_t>(pmc.PeakWorkingSetSize);
-
-            stats.total_virtual_memory_size = static_cast<std::size_t>(mem_info.ullTotalPageFile);
-            stats.virtual_memory_current_usage = static_cast<std::size_t>(pmc.PrivateUsage);
-            stats.hard_page_fault_count = static_cast<std::size_t>(pmc.PageFaultCount);
-            #endif
-            return stats;
-        }
-
-        static const std::string get_human_readible_size(std::size_t size_in_bytes)
-        {
-            const char* suffixes[] = { "B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB" };
-            constexpr int suffix_count = sizeof(suffixes) / sizeof(suffixes[0]);
-
-            std::ostringstream oss;
-
-            double size = static_cast<double>(size_in_bytes);
-            constexpr int multiplier = 1024;
-            int suffix_index = 0;
-
-            while (size >= multiplier && suffix_index < suffix_count - 1)
-            {
-                size /= multiplier;
-                suffix_index++;
-            }
-
-            oss << std::fixed << std::setprecision(2) << size << ' ' << suffixes[suffix_index];
-            return oss.str();
-        }
-
-    private :
-
-        #ifdef __linux__
-
-        static std::size_t get_physical_memory_current_usage()
-        {
-            std::size_t result = -1;
-            std::ifstream file("/proc/self/status");
-
-            if (!file.is_open())
-            {
-                return result;
-            }
-
-            std::string line;
-
-            while (std::getline(file, line))
-            {
-                if (line.compare(0, 6, "VmRSS:") == 0)
-                {
-                    // Example line = VmRSS:\t    2040 kB
-                    try // stoi may throw
-                    {
-                        result = std::stoi(line.substr(6));
-                        break;
-                    }
-                    catch (...)
-                    {
-                        return -1;
-                    }
-
-                }
-            }
-
-            file.close();
-            return result * 1024;
-        }
-
-        static std::size_t get_virtual_memory_current_usage()
-        {
-            std::size_t result = -1;
-            std::ifstream file("/proc/self/status");
-            if (!file.is_open())
-            {
-                return result;
-            }
-
-            std::string line;
-
-            while (std::getline(file, line))
-            {
-                if (line.compare(0, 7, "VmSize:") == 0)
-                {
-                    // Example line = VmSize:\t    2040 kB
-                    result = extract_number(line);
-                    break;
-                }
-            }
-
-            file.close();
-            return result * 1024;
-        }
-
-        static std::size_t extract_number(const std::string& line)
-        {
-            std::size_t number = -1;
-
-            std::size_t start = line.find_first_of("0123456789");
-
-            if (start != std::string::npos)
-            {
-                std::size_t end = line.find_first_not_of("0123456789", start);
-
-                if (end != std::string::npos)
-                {
-                    std::string number_str = line.substr(start, end - start);
-                    try // stoi may throw
-                    {
-                        number = std::stoi(number_str);
-                    }
-                    catch (...)
-                    {
-                        return -1;
-                    }
-                }
-            }
-
-            return number;
-        }
-
-        #endif
-};
-
-
-///////////////////////////////////////////////////////////////////
 // DO_NOT_OPTIMISE
 void dummy(char const volatile*){}
 
@@ -920,7 +750,7 @@ void DO_NOT_OPTIMISE(T const& value)
 
 #define BENCHMARK_BEGIN(iteration_count)  \
                             Statistics<double> report; Stopwatch<STOPWATCH_TYPE> stopwatch; auto cpu_frequency = ProcessorUtilities::get_current_cpu_frequency_hertz(); \
-                            Console::console_output_with_colour(ConsoleColour::FG_YELLOW, "Current CPU frequency ( not min or max ) : " + std::to_string(cpu_frequency) + " Hz" ); std::cout << std::endl; \
+                            Console::print_colour(ConsoleColour::FG_YELLOW, "Current CPU frequency ( not min or max ) : " + std::to_string(cpu_frequency) + " Hz" ); std::cout << std::endl; \
                             for (std::size_t iteration{ 0 }; iteration < iteration_count; iteration++){ \
                             stopwatch.start(); \
 

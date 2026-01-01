@@ -1,5 +1,4 @@
-#ifndef _MURMUR_HASH3_H_
-#define _MURMUR_HASH3_H_
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -33,5 +32,3 @@ struct MurmurHash3<T, typename std::enable_if<std::is_same<T, uint64_t>::value>:
         return static_cast<std::size_t>(h);
     }
 };
-
-#endif

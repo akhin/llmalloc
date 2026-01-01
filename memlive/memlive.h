@@ -1,9 +1,9 @@
 /*
-MEMLIVE 1.0.0
+MEMLIVE 1.0.1
 
 MIT License
 
-Copyright (c) 2025 Akin Ocal
+Copyright (c) 2026 Akin Ocal
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -55,7 +55,6 @@ SOFTWARE.
 #include <mutex> // For std::lock_guard
 #ifdef __linux__
 #include <string.h>
-#include <csignal>
 #include <errno.h>
 #include <pthread.h>
 #include <sched.h>
@@ -110,60 +109,70 @@ namespace memlive
 // Compare and swap, standard C++ provides them however it requires non-POD std::atomic usage
 // They are needed when we want to embed spinlocks in "packed" data structures which need all members to be POD such as headers
 #if defined(__GNUC__)
-#define builtin_cas(pointer, old_value, new_value) __sync_val_compare_and_swap(pointer, old_value, new_value)
+#define memlive_builtin_cas(pointer, old_value, new_value) __sync_val_compare_and_swap(pointer, old_value, new_value)
 #elif defined(_MSC_VER)
-#define builtin_cas(pointer, old_value, new_value) _InterlockedCompareExchange(reinterpret_cast<long*>(pointer), new_value, old_value)
+#define memlive_builtin_cas(pointer, old_value, new_value) _InterlockedCompareExchange(reinterpret_cast<long*>(pointer), new_value, old_value)
 #endif
 
 //////////////////////////////////////////////////////////////////////
 // memcpy
 #if defined(__GNUC__)
-#define builtin_memcpy(destination, source, size)     __builtin_memcpy(destination, source, size)
+#define memlive_builtin_memcpy(destination, source, size)     __builtin_memcpy(destination, source, size)
 #elif defined(_MSC_VER)
-#define builtin_memcpy(destination, source, size)     std::memcpy(destination, source, size)
+#define memlive_builtin_memcpy(destination, source, size)     std::memcpy(destination, source, size)
 #endif
 
 //////////////////////////////////////////////////////////////////////
 // memset
 #if defined(__GNUC__)
-#define builtin_memset(destination, character, count)  __builtin_memset(destination, character, count)
+#define memlive_builtin_memset(destination, character, count)  __builtin_memset(destination, character, count)
 #elif defined(_MSC_VER)
-#define builtin_memset(destination, character, count)  std::memset(destination, character, count)
+#define memlive_builtin_memset(destination, character, count)  std::memset(destination, character, count)
 #endif
 
 //////////////////////////////////////////////////////////////////////
 // aligned_alloc , It exists because MSVC does not provide std::aligned_alloc
 #if defined(__GNUC__)
-#define builtin_aligned_alloc(size, alignment)  std::aligned_alloc(alignment, size)
-#define builtin_aligned_free(ptr)               std::free(ptr)
+#define memlive_builtin_aligned_alloc(size, alignment)  std::aligned_alloc(alignment, size)
+#define memlive_builtin_aligned_free(ptr)               std::free(ptr)
 #elif defined(_MSC_VER)
-#define builtin_aligned_alloc(size, alignment)  _aligned_malloc(size, alignment)
-#define builtin_aligned_free(ptr)               _aligned_free(ptr)
+#define memlive_builtin_aligned_alloc(size, alignment)  _aligned_malloc(size, alignment)
+#define memlive_builtin_aligned_free(ptr)               _aligned_free(ptr)
 #endif
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // FORCE_INLINE
 #if defined(_MSC_VER)
-#define FORCE_INLINE __forceinline
+#define MEMLIVE_FORCE_INLINE __forceinline
 #elif defined(__GNUC__)
-#define FORCE_INLINE __attribute__((always_inline))
+#define MEMLIVE_FORCE_INLINE __attribute__((always_inline))
+#endif
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// LIKELY
+#if defined(_MSC_VER)
+//No implementation provided for MSVC for pre C++20 :
+//https://social.msdn.microsoft.com/Forums/vstudio/en-US/2dbdca4d-c0c0-40a3-993b-dc78817be26e/branch-hints?forum=vclanguage
+#define memlive_likely(x) x
+#elif defined(__GNUC__)
+#define memlive_likely(x)      __builtin_expect(!!(x), 1)
 #endif
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // ALIGN_DATA , some GCC versions gives warnings about standard C++ 'alignas' when applied to data
 #ifdef __GNUC__
-#define ALIGN_DATA( _alignment_ ) __attribute__((aligned( (_alignment_) )))
+#define MEMLIVE_ALIGN_DATA( _alignment_ ) __attribute__((aligned( (_alignment_) )))
 #elif _MSC_VER
-#define ALIGN_DATA( _alignment_ ) alignas( _alignment_ )
+#define MEMLIVE_ALIGN_DATA( _alignment_ ) alignas( _alignment_ )
 #endif
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // UNUSED
 //To avoid unused variable warnings
 #if defined(__GNUC__)
-#define UNUSED(x) (void)(x)
+#define MEMLIVE_UNUSED(x) (void)(x)
 #elif defined(_MSC_VER)
-#define UNUSED(x) __pragma(warning(suppress:4100)) x
+#define MEMLIVE_UNUSED(x) __pragma(warning(suppress:4100)) x
 #endif
 
 /*
@@ -192,17 +201,25 @@ inline void pause(uint16_t repeat_count=100)
 
 }
 
+namespace AlignmentConstants
+{
+    // All constants are in bytes
+    constexpr std::size_t CPU_CACHE_LINE_SIZE = 64;
+    // SIMD REGISTER WIDTHS
+    constexpr std::size_t SIMD_SSE42_WIDTH = 16;
+    constexpr std::size_t SIMD_AVX_WIDTH = 32;
+    constexpr std::size_t SIMD_AVX2_WIDTH = 32;
+    constexpr std::size_t SIMD_AVX512_WIDTH = 64;
+    constexpr std::size_t SIMD_AVX10_WIDTH = 64;
+    constexpr std::size_t MINIMUM_VECTORISATION_WIDTH = SIMD_SSE42_WIDTH;
+    constexpr std::size_t LARGEST_VECTORISATION_WIDTH = SIMD_AVX10_WIDTH;
+}
+
 #ifdef __linux__
 #elif _WIN32
 #pragma comment(lib,"Ws2_32.lib")
 #pragma warning(disable:4996)
 #endif
-
-enum class SocketType
-{
-    TCP,
-    UDP
-};
 
 enum class SocketOptionLevel
 {
@@ -225,10 +242,16 @@ enum class SocketOption
     TCP_ENABLE_CORK,
     TCP_ENABLE_QUICKACK,        // Applies only to Linux , even Nagle is turned off , delayed can cause time loss due in case of lost packages
     TCP_DISABLE_NAGLE,          // Send packets as soon as possible , no need to wait for ACKs or to reach a certain amount of buffer size
-    POLLING_INTERVAL,           // SO_BUSY_POLL , specifies time to wait for async io to query kernel to know if new data received
+    BUSY_POLL_MICROSECONDS,     // SO_BUSY_POLL , specifies time to wait for async io to query kernel to know if new data received
     SOCKET_PRIORITY,
     TIME_TO_LIVE,
     ZERO_COPY,                  // https://www.kernel.org/doc/html/v4.15/networking/msg_zerocopy.html
+};
+
+enum class SocketType
+{
+    TCP,
+    UDP
 };
 
 enum class SocketState
@@ -250,8 +273,8 @@ class SocketAddress
             m_address = address;
 
             auto addr = &m_socket_address_struct;
-            
-            builtin_memset(addr, 0, sizeof(sockaddr_in));
+
+            memlive_builtin_memset(addr, 0, sizeof(sockaddr_in));
             addr->sin_family = PF_INET;
             addr->sin_port = htons(port);
 
@@ -276,7 +299,6 @@ class SocketAddress
             #elif _WIN32
             InetNtopA(PF_INET, (struct in_addr*)&(socket_address_struct->sin_addr.s_addr), ip, sizeof(ip) - 1);
             #endif
-
             m_address = ip;
             m_port = ntohs(socket_address_struct->sin_port);
         }
@@ -309,7 +331,7 @@ class SocketAddress
 
             if (result == 0)
             {
-                builtin_memcpy(socket_address, &((struct sockaddr_in *) res->ai_addr)->sin_addr, sizeof(struct in_addr));
+                memlive_builtin_memcpy(socket_address, &((struct sockaddr_in *) res->ai_addr)->sin_addr, sizeof(struct in_addr));
                 freeaddrinfo(res);
             }
 
@@ -330,7 +352,6 @@ class Socket
             WSADATA data;
             WSAStartup(version, &data);
             #endif
-
         }
 
         static void socket_library_uninitialise()
@@ -338,7 +359,6 @@ class Socket
             #ifdef _WIN32
             WSACleanup();
             #endif
-
         }
 
         Socket():m_socket_descriptor{0}, m_state{ SocketState::DISCONNECTED }, m_pending_connections_queue_size{0}
@@ -372,7 +392,7 @@ class Socket
         }
 
         void close()
-        {            
+        {
             if (m_socket_descriptor > 0)
             {
                 #ifdef __linux__
@@ -380,29 +400,15 @@ class Socket
                 #elif _WIN32
                 ::closesocket(m_socket_descriptor);
                 #endif
-                
+
                 m_socket_descriptor = 0;
             }
-            m_state = SocketState::DISCONNECTED;
-        }
-        
-        /*
-            BY DEFAULT , LINUX APPS GET SIGPIPE SIGNALS WHEN THEY WRITE TO WRITE/SEND 
-            ON CLOSED SOCKETS WHICH MAKES IT IMPOSSIBLE TO DETECT CONNECTION LOSS DURING SENDS. 
-            BY IGNORING THE SIGNAL , CONNECTION LOSS DETECTION CAN BE DONE INSIDE THE CALLER APP
-            
-            NOTE THAT CALL TO THIS ONE WILL AFFECT THE ENTIRE APPLICATION
-        */
-        void ignore_sigpipe_signals()
-        {
-            #ifdef __linux__
-            signal(SIGPIPE, SIG_IGN);
-            #endif
 
+            m_state = SocketState::DISCONNECTED;
         }
 
         // For acceptors :  it is listening address and port
-        // For connectors : it is the NIC that the application wants to use for outgoing connection. 
+        // For connectors : it is the NIC that the application wants to use for outgoing connection.
         //                  in connector case port can be specified as 0
         bool bind(const std::string_view& address, int port)
         {
@@ -419,46 +425,6 @@ class Socket
 
             return true;
         }
-        
-        // UDP functionality
-        bool join_multicast_group(const std::string_view& multicast_address)
-        {
-            struct ip_mreq mreq;
-            mreq.imr_multiaddr.s_addr = inet_addr(multicast_address.data());
-            mreq.imr_interface.s_addr = htonl(INADDR_ANY);
-            
-            #ifdef __linux__
-            if (setsockopt(m_socket_descriptor, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) < 0)
-            #elif _WIN32
-            if (setsockopt(m_socket_descriptor, IPPROTO_IP, IP_ADD_MEMBERSHIP, reinterpret_cast<const char*>(&mreq), sizeof(mreq)) < 0)
-            #endif
-
-            {
-                return false;
-            }
-            
-            return true;
-        }
-
-        // UDP functionality
-        bool leave_multicast_group(const std::string_view& multicast_address)
-        {
-            struct ip_mreq mreq;
-            mreq.imr_multiaddr.s_addr = inet_addr(multicast_address.data());
-            mreq.imr_interface.s_addr = htonl(INADDR_ANY);
-
-            #ifdef __linux__
-            if (setsockopt(m_socket_descriptor, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mreq, sizeof(mreq)) < 0)
-            #elif _WIN32
-            if (setsockopt(m_socket_descriptor, IPPROTO_IP, IP_DROP_MEMBERSHIP, reinterpret_cast<const char*>(&mreq), sizeof(mreq)) < 0)
-            #endif
-
-            {
-                return false;
-            }
-
-            return true;
-        }
 
         bool connect(const std::string_view& address, int port)
         {
@@ -466,7 +432,7 @@ class Socket
 
             auto ret = ::connect(m_socket_descriptor, (struct sockaddr*)m_endpoint_address.get_socket_address_struct(), sizeof(struct sockaddr_in));
 
-            if (ret  != 0)
+            if (ret != 0)
             {
                 return false;
             }
@@ -490,7 +456,7 @@ class Socket
             fd_set read_set;
             FD_ZERO(&read_set);
             FD_SET(m_socket_descriptor, &read_set);
-                
+
             struct timeval tv;
             tv.tv_sec = timeout_seconds;
             tv.tv_usec = 0;
@@ -498,11 +464,11 @@ class Socket
             success = (::select(m_socket_descriptor + 1, &read_set, nullptr, nullptr, &tv) <= 0) ? false : true;
             ///////////////////////////////////////////////////
             int connector_socket_desc{ -1 };
-            
+
             struct sockaddr_in address;
             socklen_t len = sizeof(address);
-            builtin_memset(&address, 0, sizeof(address));
-            
+            memlive_builtin_memset(&address, 0, sizeof(address));
+
             if (success)
             {
                 connector_socket_desc = static_cast<int>( ::accept(m_socket_descriptor, (struct sockaddr*)&address, &len) );
@@ -561,7 +527,6 @@ class Socket
 
             ioctlsocket(m_socket_descriptor, FIONBIO, &mode);
             #endif
-
             m_in_blocking_mode = blocking_mode;
         }
 
@@ -644,13 +609,6 @@ class Socket
             return ret;
         }
 
-        void get_socket_option(SocketOptionLevel level, SocketOption option, char* buffer, std::size_t buffer_len)
-        {
-            int actual_level = get_socket_option_level_value(level);
-            int actual_option = get_socket_option_value(option);
-            getsockopt(m_socket_descriptor, actual_level, actual_option, buffer, buffer_len);
-        }
-
         static int get_current_thread_last_socket_error()
         {
             int ret{ -1 };
@@ -659,7 +617,6 @@ class Socket
             #elif _WIN32
             ret = WSAGetLastError();
             #endif
-
             return ret;
         }
 
@@ -688,7 +645,6 @@ class Socket
                 ::FreeLibrary(lib);
             }
             #endif
-
             return ret;
         }
 
@@ -706,16 +662,19 @@ class Socket
         {
             return ::recv(m_socket_descriptor, buffer, static_cast<int>(len), static_cast<int>(0));
         }
-        
-        // UDP functionality
-        int receive_from(char* buffer, std::size_t len)
-        {
-            return ::recvfrom(m_socket_descriptor, buffer, static_cast<int>(len), 0, nullptr, nullptr);
-        }
 
         int send(const char* buffer, std::size_t len)
         {
-            return ::send(m_socket_descriptor, buffer, static_cast<int>(len), static_cast<int>(0)) ;
+            #ifdef __linux__
+            /*
+                BY DEFAULT , LINUX APPS GET SIGPIPE SIGNALS WHEN THEY WRITE TO WRITE/SEND
+                ON CLOSED SOCKETS WHICH MAKES IT IMPOSSIBLE TO DETECT CONNECTION LOSS DURING SENDS.
+                BY IGNORING THE SIGNAL , CONNECTION LOSS DETECTION CAN BE DONE INSIDE THE CALLER APP
+            */
+            return ::send(m_socket_descriptor, buffer, static_cast<int>(len), MSG_NOSIGNAL);
+            #elif _WIN32
+            return ::send(m_socket_descriptor, buffer, static_cast<int>(len), static_cast<int>(0));
+            #endif
         }
 
         int send_zero_copy(const char* buffer, std::size_t len)
@@ -725,13 +684,6 @@ class Socket
             #else
             return ::send(m_socket_descriptor, buffer, static_cast<int>(len), static_cast<int>(0));
             #endif
-
-        }
-        
-        // UDP functionality
-        int send_to(const char* buffer, std::size_t len)
-        {
-            return ::sendto(m_socket_descriptor, buffer, static_cast<int>(len), 0, (struct sockaddr*)m_endpoint_address.get_socket_address_struct(), sizeof(struct sockaddr_in)) ;
         }
 
         void set_endpoint(const std::string_view& address , int port)
@@ -851,6 +803,40 @@ class Socket
             return ret;
         }
 
+        static bool get_peer_details(int socket_fd, std::string& address, int& port)
+        {
+            sockaddr_storage addr;
+            socklen_t addr_len = sizeof(addr);
+
+            if (getpeername(socket_fd, reinterpret_cast<sockaddr*>(&addr), &addr_len) != 0)
+            {
+                return false;
+            }
+
+            char host[NI_MAXHOST];
+            char serv[NI_MAXSERV];
+
+            int rc = getnameinfo(reinterpret_cast<sockaddr*>(&addr), addr_len, host, sizeof(host), serv, sizeof(serv), NI_NUMERICHOST | NI_NUMERICSERV);
+
+            if (rc != 0)
+            {
+                return false;
+            }
+
+            address = host;
+
+            try
+            {
+                port = std::stoi(serv);
+            }
+            catch(...)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
 private:
     int m_socket_descriptor;
     SocketState m_state;
@@ -915,7 +901,6 @@ private:
                 #ifdef SO_REUSEPORT
                 ret = SO_REUSEPORT;
                 #endif
-
                 break;
             case SocketOption::RECEIVE_BUFFER_SIZE:
                 ret = SO_RCVBUF;
@@ -936,37 +921,31 @@ private:
                 #ifdef TCP_QUICKACK
                 ret = TCP_QUICKACK;
                 #endif
-
                 break;
             case SocketOption::TCP_ENABLE_CORK:
                 #ifdef TCP_CORK
                 ret = TCP_CORK;
                 #endif
-
                 break;
             case SocketOption::SOCKET_PRIORITY:
                 #ifdef SO_PRIORITY
                 ret = SO_PRIORITY;
                 #endif
-
                 break;
-            case SocketOption::POLLING_INTERVAL:
+            case SocketOption::BUSY_POLL_MICROSECONDS:
                 #ifdef SO_BUSY_POLL
                 ret = SO_BUSY_POLL;
                 #endif
-
                 break;
             case SocketOption::TIME_TO_LIVE:
                 #ifdef IP_TTL
                 ret = IP_TTL;
                 #endif
-
                 break;
             case SocketOption::ZERO_COPY:
                 #ifdef SO_ZEROCOPY
                 ret = SO_ZEROCOPY;
                 #endif
-
                 break;
             default:
                 break;
@@ -977,134 +956,160 @@ private:
 };
 
 /*
-    Uses ( level triggered ) epoll on Linux and select on Windows
+    Uses ( level triggered ) epoll on Linux and WSAPoll on Windows
 */
-static constexpr std::size_t DEFAULT_EPOLL_MAX_DESCRIPTOR_COUNT = 64;
-
 #ifdef __linux__
 
-template<std::size_t MAX_DESCRIPTOR_COUNT = DEFAULT_EPOLL_MAX_DESCRIPTOR_COUNT>
 class Epoll
 {
-public:
-    Epoll()
-    {
-        m_max_epoll_events = MAX_DESCRIPTOR_COUNT;
-        m_epoll_descriptor = epoll_create1(0);
-        m_epoll_events = new struct epoll_event[m_max_epoll_events];
-    }
-
-    ~Epoll()
-    {
-        if (m_epoll_descriptor >= 0)
+    public:
+        Epoll()
         {
-            ::close(m_epoll_descriptor);
+            m_epoll_descriptor = epoll_create1(0);
         }
 
-        if (m_epoll_events)
+        ~Epoll()
         {
-            delete[] m_epoll_events;
-            m_epoll_events = nullptr;
-        }
-    }
+            if (m_epoll_descriptor >= 0)
+            {
+                ::close(m_epoll_descriptor);
+            }
 
-    static constexpr bool polls_per_socket()
-    {
-        return false;
-    }
-
-    void set_timeout(long nanoseconds)
-    {
-        m_epoll_timeout_milliseconds = nanoseconds / 1000000;
-        
-        if( m_epoll_timeout_milliseconds == 0 )
-        {
-            m_epoll_timeout_milliseconds = 1;
-        }
-    }
-
-    void clear_descriptors()
-    {
-        if (m_epoll_descriptor >= 0)
-        {
-            ::close(m_epoll_descriptor);
+            if (m_epoll_events)
+            {
+                delete[] m_epoll_events;
+                m_epoll_events = nullptr;
+            }
         }
 
-        m_epoll_descriptor = epoll_create1(0);
-    }
-
-    void add_descriptor(int fd)
-    {
-        struct epoll_event epoll_descriptor;
-        epoll_descriptor.data.fd = fd;
-
-        epoll_descriptor.events = EPOLLIN;
-
-        epoll_ctl(m_epoll_descriptor, EPOLL_CTL_ADD, fd, &epoll_descriptor);
-    }
-
-    void remove_descriptor(int fd)
-    {
-        struct epoll_event epoll_descriptor;
-        epoll_descriptor.data.fd = fd;
-        epoll_descriptor.events = EPOLLIN;
-
-        epoll_ctl(m_epoll_descriptor, EPOLL_CTL_DEL, fd, &epoll_descriptor);
-    }
-
-    int get_number_of_ready_events()
-    {
-        int result{ -1 };
-
-        result = ::epoll_wait(m_epoll_descriptor, m_epoll_events, m_max_epoll_events, m_epoll_timeout_milliseconds);
-
-        return result;
-    }
-
-    bool is_valid_event(int index)
-    {
-        if (m_epoll_events[index].events & EPOLLIN)
+        static constexpr bool polls_per_socket()
         {
+            return false;
+        }
+
+        bool initialise(long timeout_nanoseconds, std::size_t max_event_count=64)
+        {
+            // Epoll events
+            m_max_epoll_events = max_event_count;
+
+            if(m_epoll_events)
+            {
+                delete[] m_epoll_events;
+                m_epoll_events = nullptr;
+            }
+
+            m_epoll_events = new struct epoll_event[m_max_epoll_events];
+
+            if(m_epoll_events == nullptr)
+            {
+                return false;
+            }
+
+            // Timeout
+            m_epoll_timeout_milliseconds = timeout_nanoseconds / 1'000'000;
+
+            if( m_epoll_timeout_milliseconds == 0 )
+            {
+                m_epoll_timeout_milliseconds = 1;
+            }
+
             return true;
         }
 
-        return false;
-    }
+        void clear_descriptors()
+        {
+            if (m_epoll_descriptor >= 0)
+            {
+                ::close(m_epoll_descriptor);
+            }
 
-    int get_ready_descriptor(int index)
-    {
-        int ret{ -1 };
-        ret = m_epoll_events[index].data.fd;
-        return ret;
-    }
+            m_epoll_descriptor = epoll_create1(0);
+        }
 
-    //////////////////////////////////////////////////////////////////////////////
-    // COMMON INTERFACE AS GCC'S SUPPORT FOR IF-CONSTEXPR IS NOT AS GOOD AS MSVC
-    // EVEN THOUGH THEY WON'T BE CALLED GCC STILL WANTS TO SEE THEM
-    int get_number_of_ready_descriptors() { assert(1==0);return 0;}
-    bool is_descriptor_ready(int fd) { assert(1==0); return false;}
-    //////////////////////////////////////////////////////////////////////////////
+        void add_descriptor(int fd)
+        {
+            const std::lock_guard<std::mutex> lock(m_descriptor_lock);
 
-private:
-    int m_epoll_descriptor = -1;
-    struct epoll_event* m_epoll_events = nullptr;
-    
-    std::size_t m_max_epoll_events = -1;
+            struct epoll_event epoll_descriptor{};
+            epoll_descriptor.data.fd = fd;
 
-    int m_epoll_timeout_milliseconds = 0;
+            epoll_descriptor.events = EPOLLIN;
+
+            epoll_ctl(m_epoll_descriptor, EPOLL_CTL_ADD, fd, &epoll_descriptor);
+        }
+
+        void remove_descriptor(int fd)
+        {
+            const std::lock_guard<std::mutex> lock(m_descriptor_lock);
+
+            struct epoll_event epoll_descriptor;
+            epoll_descriptor.data.fd = fd;
+            epoll_descriptor.events = EPOLLIN;
+
+            epoll_ctl(m_epoll_descriptor, EPOLL_CTL_DEL, fd, &epoll_descriptor);
+        }
+
+        int get_number_of_ready_events()
+        {
+            int result{ -1 };
+            result = epoll_wait(m_epoll_descriptor, m_epoll_events, m_max_epoll_events, m_epoll_timeout_milliseconds);
+            return result;
+        }
+
+        bool is_valid_event(int index)
+        {
+            if (m_epoll_events[index].events & EPOLLIN)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        int get_ready_descriptor(int index)
+        {
+            int ret{ -1 };
+            ret = m_epoll_events[index].data.fd;
+            return ret;
+        }
+
+        //////////////////////////////////////////////////////////////////////////////
+        // COMMON INTERFACE AS GCC'S SUPPORT FOR IF-CONSTEXPR IS NOT AS GOOD AS MSVC
+        // EVEN THOUGH THEY WON'T BE CALLED GCC STILL WANTS TO SEE THEM
+        int get_number_of_ready_descriptors() { assert(1==0);return 0;}
+        bool is_descriptor_ready(int fd) { assert(1==0); return false;}
+        //////////////////////////////////////////////////////////////////////////////
+
+    private:
+        int m_epoll_descriptor = -1;
+        struct epoll_event* m_epoll_events = nullptr;
+        std::size_t m_max_epoll_events = 64;
+        int m_epoll_timeout_milliseconds = 0;
+        std::mutex m_descriptor_lock;
 };
 
 #elif _WIN32
 
-template<std::size_t MAX_DESCRIPTOR_COUNT = 0>  // Currently not used in select, just here to conform asynciopoller interface
+// Since WSAPoll is broken, Windows implementation uses select to emulate epoll.
+// By default it can only monitor 64 sockets. To increase that limit, you shall set FD_SETSIZE before winsock inclusion : https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-select
 class Epoll
 {
     public:
+        Epoll() = default;
 
-        Epoll()
+        ~Epoll()
         {
-            FD_ZERO(&m_query_set);
-            FD_ZERO(&m_result_set);
+            if (m_query_set)
+            {
+                delete m_query_set;
+                m_query_set = nullptr;
+            }
+
+            if (m_result_set)
+            {
+                delete m_result_set;
+                m_result_set = nullptr;
+            }
         }
 
         static constexpr bool polls_per_socket()
@@ -1112,62 +1117,94 @@ class Epoll
             return true;
         }
 
-        void clear_descriptors()
+        bool initialise(long timeout_nanoseconds, std::size_t max_event_count = 64)
         {
-            FD_ZERO(&m_query_set);
-        }
+            MEMLIVE_UNUSED(max_event_count);
 
-        void set_timeout(long nanoseconds)
-        {
+            m_query_set = new fd_set;
+
+            if(m_query_set==nullptr)
+            {
+                m_query_set = new fd_set;
+
+                if(m_query_set == nullptr)
+                    return false;
+            }
+
+            if(m_result_set == nullptr)
+            {
+                m_result_set = new fd_set;
+
+                if(m_result_set == nullptr)
+                    return false;
+            }
+
+
+            FD_ZERO(m_query_set);
+            FD_ZERO(m_result_set);
+
             m_timeout.tv_sec = 0;
-            m_timeout.tv_usec = nanoseconds / 1000;
-            
-            if( m_timeout.tv_usec == 0 )
+            m_timeout.tv_usec = timeout_nanoseconds / 1000;
+
+            if (m_timeout.tv_usec == 0)
             {
                 m_timeout.tv_usec = 1;
             }
+
+            return true;
+        }
+
+        void clear_descriptors()
+        {
+            if(m_query_set)
+                FD_ZERO(m_query_set);
         }
 
         void add_descriptor(int fd)
         {
+            const std::lock_guard<std::mutex> lock(m_descriptor_lock);
+
             if (fd > m_max_descriptor)
             {
                 m_max_descriptor = fd;
             }
 
-            FD_SET(fd, &m_query_set);
+            FD_SET(fd, m_query_set);
         }
 
         void remove_descriptor(int fd)
         {
-            if (FD_ISSET(fd, &m_query_set))
+            const std::lock_guard<std::mutex> lock(m_descriptor_lock);
+
+            if (FD_ISSET(fd, m_query_set))
             {
-                FD_CLR(fd, &m_query_set);
+                FD_CLR(fd, m_query_set);
             }
         }
 
         int get_number_of_ready_descriptors()
         {
-            m_result_set = m_query_set;
-            return ::select(m_max_descriptor + 1, &m_result_set, nullptr, nullptr, &m_timeout);
+            *m_result_set = *m_query_set;
+            return ::select(m_max_descriptor + 1, m_result_set, nullptr, nullptr, &m_timeout);
+
         }
 
         bool is_descriptor_ready(int fd)
         {
             bool ret{ false };
 
-            ret = (FD_ISSET(fd, &m_result_set)) ? true : false;
+            ret = (FD_ISSET(fd, m_result_set)) ? true : false;
 
             return ret;
         }
 
-    private :
+    private:
         int m_max_descriptor = -1;
         struct timeval m_timeout;
-        fd_set m_query_set;
-        fd_set m_result_set;
+        fd_set* m_query_set = nullptr;
+        fd_set* m_result_set = nullptr;
+        std::mutex m_descriptor_lock;
 };
-
 #endif
 
 class ThreadUtilities
@@ -1182,7 +1219,7 @@ class ThreadUtilities
             SwitchToThread();
             #endif
         }
-        
+
         static inline void sleep_in_nanoseconds(unsigned long nanoseconds)
         {
             #ifdef __linux__
@@ -1194,9 +1231,29 @@ class ThreadUtilities
             std::this_thread::sleep_for(std::chrono::nanoseconds(nanoseconds));
             #endif
         }
+
+        static int pin_calling_thread_to_cpu_core(int core_id)
+        {
+            int ret{ -1 };
+            #ifdef __linux__
+            cpu_set_t cpuset;
+            CPU_ZERO(&cpuset);
+            CPU_SET(core_id, &cpuset);
+            ret = pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+            #elif _WIN32
+            unsigned long mask = 1 << (core_id);
+
+            if (SetThreadAffinityMask(GetCurrentThread(), mask))
+            {
+                ret = 0;
+            }
+            #endif
+
+            return ret;
+        }
 };
 
-/*  
+/*
     Standard C++ thread_local keyword does not allow you to specify thread specific destructors
     and also can't be applied to class members
 */
@@ -1346,13 +1403,11 @@ class Pow2Utilities
     Doesn`t check against uniprocessors. Prefer "Lock" in os/lock.h for old systems
 */
 
-// Pass alignment = AlignmentConstants::CACHE_LINE_SIZE to make the lock cacheline aligned
-
-template<std::size_t alignment=sizeof(uint32_t), std::size_t spin_count = 1024, std::size_t pause_count = 64, bool extra_system_friendly = false>
+template<std::size_t alignment=AlignmentConstants::CPU_CACHE_LINE_SIZE, std::size_t spin_count = 1024, std::size_t pause_count = 64, bool extra_system_friendly = false>
 struct UserspaceSpinlock
 {
     // No privates, ctors or dtors to stay as PACKED+POD
-    ALIGN_DATA(alignment) uint32_t m_flag=0;
+    MEMLIVE_ALIGN_DATA(alignment) uint32_t m_flag=0;
 
     void initialise()
     {
@@ -1380,9 +1435,9 @@ struct UserspaceSpinlock
         }
     }
 
-    FORCE_INLINE bool try_lock()
+    MEMLIVE_FORCE_INLINE bool try_lock()
     {
-        if (builtin_cas(&m_flag, 0, 1) == 1)
+        if (memlive_builtin_cas(&m_flag, 0, 1) == 1)
         {
             return false;
         }
@@ -1390,46 +1445,199 @@ struct UserspaceSpinlock
         return true;
     }
 
-    FORCE_INLINE void unlock()
+    MEMLIVE_FORCE_INLINE void unlock()
     {
         m_flag = 0;
     }
 };
 
-/*
-    Using epoll on Linux and select on Windows as their latest ioring and iouring are not widespread available
-*/
+
+class Connector
+{
+    public:
+        void set_socket(Socket<SocketType::TCP>* socket) { m_socket = socket; }
+        void set_is_connected(bool b) { m_connected = b; }
+        void set_last_receive_result(int n) { m_last_receive_result = n; }
+        void set_incomplete_buffer_size(std::size_t n) { m_incomplete_buffer_size = n; }
+        void set_can_be_dispatched_to_separate_thread(bool b) { m_can_be_dispatched_to_separate_thread = b; }
+        void set_marked_for_recycling(bool b) { m_marked_for_recycling = b; }
+
+        Socket<SocketType::TCP>* socket() { return m_socket; }
+        bool connected() const { return m_connected; }
+        int last_receive_result() const { return m_last_receive_result; }
+        std::size_t incomplete_buffer_size() const { return m_incomplete_buffer_size; }
+        bool can_be_dispatched_to_separate_thread() const { return m_can_be_dispatched_to_separate_thread; }
+        bool marked_for_recycling() const { return m_marked_for_recycling; }
+
+        char* incomplete_buffer() { return m_incomplete_buffer; }
+        char* rx_buffer() { return m_rx_buffer; }
+
+        Connector()
+        {
+            m_rx_buffer = nullptr;
+            m_incomplete_buffer = nullptr;
+        }
+
+        ~Connector()
+        {
+            destroy();
+        }
+
+        bool initialise(std::size_t rx_buffer_capacity)
+        {
+            if(m_rx_buffer == nullptr)
+            {
+                m_rx_buffer = static_cast<char*>(malloc(rx_buffer_capacity));
+
+                if(m_rx_buffer == nullptr)
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                memlive_builtin_memset(m_rx_buffer, 0, rx_buffer_capacity);
+            }
+
+            if(m_incomplete_buffer == nullptr)
+            {
+                m_incomplete_buffer = static_cast<char*>(malloc(rx_buffer_capacity*2));
+
+                if(m_incomplete_buffer == nullptr)
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                memlive_builtin_memset(m_incomplete_buffer, 0, rx_buffer_capacity*2);
+            }
+
+            if(m_socket)
+            {
+                m_socket->close();
+                delete m_socket;
+                m_socket = nullptr;
+            }
+
+            m_marked_for_recycling = false;
+            m_can_be_dispatched_to_separate_thread = false;
+
+            return true;
+        }
+
+        void close()
+        {
+            m_connected = false;
+            m_can_be_dispatched_to_separate_thread = false;
+            m_marked_for_recycling = false;
+
+            m_incomplete_buffer_size = 0;
+            m_last_receive_result = 0;
+
+            if(m_socket)
+            {
+                m_socket->close();
+                delete m_socket;
+                m_socket = nullptr;
+            }
+        }
+
+    private:
+        std::atomic<bool> m_connected = false;
+        Socket<SocketType::TCP>* m_socket = nullptr;
+        // RX
+        int m_last_receive_result = 0;
+        char* m_rx_buffer = nullptr;
+        char* m_incomplete_buffer = nullptr;
+        std::size_t m_incomplete_buffer_size = 0;
+        std::atomic<bool> m_can_be_dispatched_to_separate_thread = false;
+        std::atomic<bool> m_marked_for_recycling = false;
+
+        void destroy()
+        {
+            if(m_rx_buffer != nullptr)
+            {
+                free(m_rx_buffer);
+                m_rx_buffer = nullptr;
+            }
+
+            if(m_incomplete_buffer != nullptr)
+            {
+                free(m_incomplete_buffer);
+                m_incomplete_buffer = nullptr;
+            }
+
+            if(m_socket)
+            {
+                delete m_socket;
+                m_socket = nullptr;
+            }
+
+            m_incomplete_buffer_size = 0;
+            m_last_receive_result = 0;
+
+            m_connected = false;
+            m_can_be_dispatched_to_separate_thread = false;
+            m_marked_for_recycling = false;
+        }
+};
+
 template <typename SocketType>
 class Connectors
 {
     public:
 
-        Connectors()
+        void initialise(std::size_t rx_buffer_capacity)
         {
-            m_connector_sockets.reserve(DEFAULT_ASYNC_IO_MAX_DESCRIPTOR_COUNT);
-            m_connector_sockets_connection_flags.reserve(DEFAULT_ASYNC_IO_MAX_DESCRIPTOR_COUNT);
-            m_connector_socket_index_table.reserve(DEFAULT_ASYNC_IO_MAX_DESCRIPTOR_COUNT);
+            m_lock.initialise();
+            m_connectors.reserve(1024);
+            m_descriptor_index_table.reserve(1024);
+            m_rx_buffer_capacity = rx_buffer_capacity;
         }
 
-        std::size_t get_capacity() const
+        ~Connectors()
         {
-            return m_connector_sockets.size();
+            for (auto& connector : m_connectors)
+            {
+                if (connector)
+                {
+                    connector->close();
+                    delete connector;
+                }
+            }
         }
 
-        int get_socket_descriptor(std::size_t index)
+        void reset()
         {
-            return m_connector_sockets[index]->get_socket_descriptor();
+            const std::lock_guard<UserspaceSpinlock<>> lock(m_lock);
+
+            for (auto& connector : m_connectors)
+            {
+                if (connector)
+                {
+                    connector->close();
+                    delete connector;
+                }
+            }
+
+            m_connectors.clear();
+            m_descriptor_index_table.clear();
+
+            m_rx_buffer_capacity = 0; // per connector
         }
 
-        std::size_t add_connector(SocketType* connector)
+        std::size_t add_connector(SocketType* connector_socket)
         {
-            std::size_t current_size = m_connector_sockets.size();
+            const std::lock_guard<UserspaceSpinlock<>> lock(m_lock);
+
+            std::size_t current_size = m_connectors.size();
             int non_used_connector_index = -1;
             std::size_t ret = -1;
 
             for (std::size_t i{ 0 }; i < current_size; i++)
             {
-                if (m_connector_sockets_connection_flags[i] == false)
+                if (m_connectors[i]->connected() == false)
                 {
                     non_used_connector_index = static_cast<int>(i);
                     break;
@@ -1439,80 +1647,182 @@ class Connectors
             if (non_used_connector_index == -1)
             {
                 // No empty slot , create new
-                m_connector_sockets_connection_flags.push_back(true);
-                m_connector_sockets.emplace_back(connector);
-                ret = m_connector_sockets.size() - 1;
+                Connector* new_connector = new Connector;
+                new_connector->initialise(m_rx_buffer_capacity);
+
+                new_connector->set_is_connected(true);
+                new_connector->set_socket(connector_socket);
+
+                m_connectors.push_back(new_connector);
+                ret = m_connectors.size() - 1;
             }
             else
             {
                 // Use an existing connector slot
-                m_connector_sockets[non_used_connector_index].reset(connector);
-                m_connector_sockets_connection_flags[non_used_connector_index] = true;
+                m_connectors[non_used_connector_index]->initialise(m_rx_buffer_capacity);
+                m_connectors[non_used_connector_index]->set_socket(connector_socket);
+                m_connectors[non_used_connector_index]->set_is_connected(true);
                 ret = non_used_connector_index;
             }
 
-            auto desc = connector->get_socket_descriptor();
-            m_connector_socket_index_table[desc] = ret;
+            auto desc = connector_socket->get_socket_descriptor();
+            m_descriptor_index_table[desc] = ret;
 
             return ret;
         }
 
-        void remove_connector(std::size_t connector_index)
+        void recycle_connector(std::size_t connector_index)
         {
-            m_connector_sockets_connection_flags[connector_index] = false;
-            auto connector_socket = get_connector_socket(connector_index);
-            connector_socket->close();
+            const std::lock_guard<UserspaceSpinlock<>> lock(m_lock);
+            m_connectors[connector_index]->close();
+        }
+
+        std::size_t get_connector_count()
+        {
+            const std::lock_guard<UserspaceSpinlock<>> lock(m_lock);
+            return m_connectors.size();
         }
 
         std::size_t get_connector_index_from_descriptor(int fd)
         {
-            return m_connector_socket_index_table[fd];
+            const std::lock_guard<UserspaceSpinlock<>> lock(m_lock);
+            return m_descriptor_index_table[fd];
         }
 
-        void close_all_sockets()
+        Connector* operator[](std::size_t index)
         {
-            for (auto& connector_socket : m_connector_sockets)
-            {
-                connector_socket->close();
-            }
-        }
-
-        SocketType* get_connector_socket(std::size_t connector_index)
-        {
-            return m_connector_sockets[connector_index].get();
+            const std::lock_guard<UserspaceSpinlock<>> lock(m_lock);
+            return m_connectors[index];
         }
 
 private:
-    static constexpr std::size_t DEFAULT_ASYNC_IO_MAX_DESCRIPTOR_COUNT = 64;
-    std::vector<std::unique_ptr<SocketType>> m_connector_sockets;
-    std::vector<bool> m_connector_sockets_connection_flags;
-    std::unordered_map<int, std::size_t> m_connector_socket_index_table;
+    std::vector<Connector*> m_connectors;
+    std::unordered_map<int, std::size_t> m_descriptor_index_table;
+    std::size_t m_rx_buffer_capacity = 0; // per connector
+    UserspaceSpinlock<> m_lock;
 };
 
-template <typename TcpReactorImplementation, typename AsyncIOPollerType>
+struct TCPReactorOptions
+{
+    // DEFAULTS
+    constexpr static int inline DEFAULT_POLL_TIMEOUT_NANOSECONDS = 5;
+    constexpr static int inline DEFAULT_ACCEPT_TIMEOUT_SECONDS = 5;
+    constexpr static int inline DEFAULT_PENDING_CONNECTION_QUEUE_SIZE = 32;
+    //
+    int m_port = 0;
+    int m_cpu_core_id = -1;
+    std::size_t m_rx_buffer_capacity = 655360; // per connector
+    int m_receive_size=4096;
+    int send_try_count = 0;
+    int m_accept_timeout_seconds = DEFAULT_ACCEPT_TIMEOUT_SECONDS;
+    // NIC
+    std::string m_nic_interface_name;   // Not used, only here to conform to the common interface
+    std::string m_nic_interface_ip;
+    int m_nic_ringbuffer_tx_size = 2048; // Not used, only here to conform to the common interface
+    int m_nic_ringbuffer_rx_size = 4096; // Not used, only here to conform to the common interface
+    // STACK
+    bool m_enable_quick_ack = false;
+    int m_pending_connection_queue_size= DEFAULT_PENDING_CONNECTION_QUEUE_SIZE;
+    int m_socket_rx_size = 212992;
+    int m_socket_tx_size = 212992;
+    bool m_disable_nagle = true;
+    // ASYNC IO
+    int m_busy_poll_microseconds = 0;
+    int64_t m_async_io_timeout_nanoseconds = DEFAULT_POLL_TIMEOUT_NANOSECONDS;
+    std::size_t m_max_poll_events = 64;
+    // OTHERS
+    int m_spin_count = 1;               // Not used, only here to conform to the common interface
+    int m_worker_thread_count = 0;      // Not used, only here to conform to the common interface
+    void* m_stack = nullptr;            // Not used, only here to conform to the common interface
+};
+
+template <typename TcpReactorImplementation, typename AsyncIOPollerType=Epoll>
 class TcpReactor
 {
     public:
 
+        struct Callback
+        {
+            void (*fn)(void*);
+            void (*deleter)(void*);
+            void* ctx;
+        };
+
         ~TcpReactor()
         {
             stop();
+            for (auto& cb : m_callbacks)
+                cb.deleter(cb.ctx);
+
+            for (auto& cb : m_termination_callbacks)
+                cb.deleter(cb.ctx);
         }
 
-        bool start(const std::string& address, int port, int poll_timeout_nanoseconds = TcpReactor::DEFAULT_POLL_TIMEOUT_NANOSECONDS , int accept_timeout_seconds = TcpReactor::DEFAULT_ACCEPT_TIMEOUT_SECONDS, int pending_connection_queue_size = TcpReactor::DEFAULT_PENDING_CONNECTION_QUEUE_SIZE)
+        static constexpr bool is_multithreaded()
+        {
+            return false;
+        }
+
+        void set_params(const TCPReactorOptions& options)
+        {
+            m_options = options;
+        }
+
+        template <typename F>
+        void register_callback(F f)
+        {
+            F* context = new F(std::move(f));
+
+            m_callbacks.push_back({
+                [](void* p) {
+                    F* fn = static_cast<F*>(p);
+                    (*fn)(); // invoking operator() of std::bind's ret val OR lambda expression
+                },
+                [](void* p) {
+                F* fn = static_cast<F*>(p);
+                delete fn;
+                },
+                context
+                });
+        }
+
+        template <typename F>
+        void register_termination_callback(F f)
+        {
+            F* context = new F(std::move(f));
+
+            m_termination_callbacks.push_back({
+                [](void* p) {
+                    F* fn = static_cast<F*>(p);
+                    (*fn)(); // invoking operator() of std::bind's ret val OR lambda expression
+                },
+                [](void* p) {
+                F* fn = static_cast<F*>(p);
+                delete fn;
+                },
+                context
+                });
+        }
+
+        bool start()
         {
             m_is_stopping.store(false);
-            m_accept_timeout_seconds = accept_timeout_seconds;
+            m_lock.initialise();
+
+            m_connectors.initialise(m_options.m_rx_buffer_capacity);
 
             m_acceptor_socket.create();
-            
-            m_acceptor_socket.ignore_sigpipe_signals();
-            
-            m_acceptor_socket.set_pending_connections_queue_size(pending_connection_queue_size);
+
+            m_acceptor_socket.set_pending_connections_queue_size(m_options.m_pending_connection_queue_size);
 
             m_acceptor_socket.set_socket_option(SocketOptionLevel::SOCKET, SocketOption::REUSE_ADDRESS, 1);
 
-            if (!m_acceptor_socket.bind(address, port))
+            if(m_options.m_busy_poll_microseconds > 0)
+            {
+                m_acceptor_socket.set_socket_option(SocketOptionLevel::SOCKET, SocketOption::BUSY_POLL_MICROSECONDS, m_options.m_busy_poll_microseconds);
+            }
+
+            if (!m_acceptor_socket.bind(m_options.m_nic_interface_ip, m_options.m_port))
             {
                 return false;
             }
@@ -1524,7 +1834,11 @@ class TcpReactor
 
             m_acceptor_socket.set_blocking_mode(false);
 
-            m_asio_reader.set_timeout(poll_timeout_nanoseconds);
+            if( m_asio_reader.initialise(static_cast<long>(m_options.m_async_io_timeout_nanoseconds), m_options.m_max_poll_events) == false)
+            {
+                return false;
+            }
+
             m_asio_reader.add_descriptor(m_acceptor_socket.get_socket_descriptor());
 
             m_reactor_thread.reset( new std::thread(&TcpReactor::reactor_thread, this) );
@@ -1540,27 +1854,212 @@ class TcpReactor
 
                 std::lock_guard<UserspaceSpinlock<>> lock(m_lock);
 
-                m_asio_reader.clear_descriptors();
-
                 if (m_reactor_thread.get() != nullptr)
                 {
-                    m_reactor_thread->join();
+                    if( m_reactor_thread->joinable() )
+                    {
+                        m_reactor_thread->join();
+                        m_asio_reader.clear_descriptors();
+                        m_connectors.reset();
+                        m_acceptor_socket.close();
+                    }
                 }
-
-                m_connectors.close_all_sockets();
             }
         }
 
+        bool get_peer_details(std::size_t peer_index, std::string& address, int& port)
+        {
+            if (!m_connectors[peer_index]->connected())
+                return false;
+
+            auto connector_socket = m_connectors[peer_index]->socket();
+
+            if(connector_socket == nullptr)
+                return false;
+
+            auto socket_fd = connector_socket->get_socket_descriptor();
+            return Socket<>::get_peer_details(socket_fd, address, port);
+        }
+
+        void close_connection(std::size_t peer_index)
+        {
+            on_client_disconnected(peer_index);
+        }
+
+        // Common interface
+        void mark_connector_as_ready_for_worker_thread_dispatch(std::size_t connector_index)
+        {
+            MEMLIVE_UNUSED(connector_index);
+        }
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TX
+        MEMLIVE_FORCE_INLINE bool send(std::size_t index, const char* buffer, std::size_t buffer_size)
+        {
+            auto peer_socket = m_connectors[index]->socket();
+            int bytes_sent{0};
+            int iteration{0};
+
+            while(true)
+            {
+                if(m_options.send_try_count>0)
+                {
+                    iteration++;
+
+                    if(iteration == m_options.send_try_count)
+                    {
+                        return false;
+                    }
+                }
+
+                auto result = peer_socket->send(buffer + bytes_sent, buffer_size - bytes_sent);
+
+                if ( memlive_likely (result > 0 && result <= static_cast<int>(buffer_size)) )
+                {
+                    bytes_sent += result;
+                }
+                else
+                {
+                    if(check_errors_during_send(index, result) == false)
+                    {
+                        return false;
+                    }
+                }
+
+                if (static_cast<std::size_t>(bytes_sent) == buffer_size)
+                {
+                    return true;
+                }
+            }
+        }
+        ///////////////////////////////////////////////////////////////////////////////////
+        // RX
+        MEMLIVE_FORCE_INLINE int receive(std::size_t index)
+        {
+            auto connector = m_connectors[index];
+            auto last_receive_result = connector->socket()->receive(connector->rx_buffer(), m_options.m_receive_size);
+            connector->set_last_receive_result( last_receive_result );
+            return last_receive_result;
+        }
+
+        MEMLIVE_FORCE_INLINE void receive_done(std::size_t index)
+        {
+            if( m_connectors[index]->last_receive_result() <= 0 )
+            {
+                check_errors_during_receive(index);
+            }
+        }
+
+        MEMLIVE_FORCE_INLINE char* get_rx_buffer(std::size_t index)
+        {
+            auto connector = m_connectors[index];
+
+            if(memlive_likely(connector->incomplete_buffer_size() ==0))
+            {
+                return  connector->rx_buffer();
+            }
+            else
+            {
+                memlive_builtin_memcpy(connector->incomplete_buffer()+connector->incomplete_buffer_size(), connector->rx_buffer(), connector->last_receive_result());
+                return connector->incomplete_buffer();
+            }
+        }
+
+        MEMLIVE_FORCE_INLINE void set_incomplete_buffer(std::size_t index, char* buffer, std::size_t buffer_size)
+        {
+            assert(buffer != nullptr && buffer_size > 0);
+            assert(buffer_size <= (m_options.m_rx_buffer_capacity*2));
+            if(buffer != m_connectors[index]->incomplete_buffer())
+                memlive_builtin_memcpy(m_connectors[index]->incomplete_buffer(), buffer, buffer_size);
+            m_connectors[index]->set_incomplete_buffer_size(buffer_size);
+        }
+
+        MEMLIVE_FORCE_INLINE std::size_t get_rx_buffer_size(std::size_t index)
+        {
+            return m_connectors[index]->last_receive_result() + m_connectors[index]->incomplete_buffer_size();
+        }
+
+        MEMLIVE_FORCE_INLINE void reset_incomplete_buffer(std::size_t index)
+        {
+            m_connectors[index]->set_incomplete_buffer_size(0);
+        }
+
+        MEMLIVE_FORCE_INLINE std::size_t get_rx_buffer_capacity()
+        {
+            return m_options.m_rx_buffer_capacity;
+        }
+        ///////////////////////////////////////////////////////////////////////////////////
+        // CRTP STATICALLY-POLYMORPHIC METHODS
+        void on_client_connected(std::size_t connector_index)
+        {
+            derived_class_implementation().on_client_connected(connector_index);
+        }
+
+        void on_client_disconnected(std::size_t connector_index)
+        {
+            if(m_connectors[connector_index]->socket())
+                m_asio_reader.remove_descriptor(m_connectors[connector_index]->socket()->get_socket_descriptor());
+            m_connectors.recycle_connector(connector_index);
+
+            derived_class_implementation().on_client_disconnected(connector_index);
+        }
+
+        void on_data_ready(std::size_t connector_index)
+        {
+            derived_class_implementation().on_data_ready(connector_index);
+        }
+
+        void on_async_io_error(int error_code, int event_result)
+        {
+            derived_class_implementation().on_async_io_error(error_code, event_result);
+        }
+
+        void on_socket_error(int error_code, int event_result)
+        {
+            derived_class_implementation().on_socket_error(error_code, event_result);
+        }
+        ///////////////////////////////////////////////////////////////////////////////////
+
+    protected:
+        TCPReactorOptions m_options;
+        std::unique_ptr<std::thread> m_reactor_thread;
+        Socket<SocketType::TCP> m_acceptor_socket;
+        AsyncIOPollerType m_asio_reader;
+        std::atomic<bool> m_is_stopping = false;
+        UserspaceSpinlock<> m_lock;
+
+        Connectors<Socket<SocketType::TCP>> m_connectors;
+        std::vector<Callback> m_callbacks;
+        std::vector<Callback> m_termination_callbacks;
+
+    private:
+
+        TcpReactorImplementation& derived_class_implementation() { return *static_cast<TcpReactorImplementation*>(this); }
+
         void reactor_thread()
         {
+            if (m_options.m_cpu_core_id != -1)
+            {
+                ThreadUtilities::pin_calling_thread_to_cpu_core(m_options.m_cpu_core_id);
+            }
+
             while (true)
             {
                 if (m_is_stopping.load() == true)
                 {
+                    for (auto& cb : m_callbacks)
+                    {
+                        cb.fn(cb.ctx);
+                    }
+
                     break;
                 }
 
                 std::lock_guard<UserspaceSpinlock<>> lock(m_lock);
+
+                for (auto& cb : m_callbacks)
+                {
+                    cb.fn(cb.ctx);
+                }
 
                 int result = 0;
 
@@ -1580,7 +2079,7 @@ class TcpReactor
                         for (int counter{ 0 }; counter < result; counter++)
                         {
                             auto current_descriptor = m_asio_reader.get_ready_descriptor(counter);
-                            size_t peer_index = m_connectors.get_connector_index_from_descriptor(current_descriptor);
+                            std::size_t peer_index = m_connectors.get_connector_index_from_descriptor(current_descriptor);
 
                             if (m_asio_reader.is_valid_event(counter))
                             {
@@ -1590,7 +2089,8 @@ class TcpReactor
                                 }
                                 else
                                 {
-                                    on_data_ready(peer_index);
+                                    if(m_connectors[peer_index]->connected())
+                                        on_data_ready(peer_index);
                                 }
                             }
                         }
@@ -1602,12 +2102,15 @@ class TcpReactor
                             accept_new_connection();
                         }
 
-                        auto peer_count = m_connectors.get_capacity();
+                        auto peer_count = m_connectors.get_connector_count();
                         for (int counter{ 0 }; counter < static_cast<int>(peer_count); counter++)
                         {
-                            if (m_asio_reader.is_descriptor_ready(m_connectors.get_socket_descriptor(counter)))
+                            if (m_connectors[counter]->connected())
                             {
-                                on_data_ready(counter);
+                                if (m_asio_reader.is_descriptor_ready(m_connectors[counter]->socket()->get_socket_descriptor()))
+                                {
+                                    on_data_ready(counter);
+                                }
                             }
                         }
                     }
@@ -1618,6 +2121,11 @@ class TcpReactor
                     on_async_io_error(error_code, result);
                 }
             }
+
+            for (auto& cb : m_termination_callbacks)
+            {
+                cb.fn(cb.ctx);
+            }
         }
 
         std::size_t accept_new_connection()
@@ -1625,7 +2133,7 @@ class TcpReactor
             std::size_t connector_index{ 0 };
 
             Socket<SocketType::TCP>* connector_socket = nullptr;
-            connector_socket = m_acceptor_socket.accept(m_accept_timeout_seconds);
+            connector_socket = m_acceptor_socket.accept(m_options.m_accept_timeout_seconds);
 
             if (connector_socket)
             {
@@ -1638,60 +2146,52 @@ class TcpReactor
             return connector_index;
         }
 
-        Socket<SocketType::TCP>& get_acceptor_socket()
+        void check_errors_during_receive(std::size_t index)
         {
-            return m_acceptor_socket;
+            auto read = m_connectors[index]->last_receive_result();
+            auto error = Socket<SocketType::TCP>::get_current_thread_last_socket_error();
+
+            if( read == 0)
+            {
+                on_client_disconnected(index);
+            }
+            else if (m_connectors[index]->socket()->is_connection_lost_during_receive(error))
+            {
+                on_client_disconnected(index);
+            }
+            else if (error != 0)
+            {
+                on_socket_error(error, static_cast<int>(read));
+            }
         }
 
-        constexpr static int inline DEFAULT_POLL_TIMEOUT_NANOSECONDS = 5;
-        constexpr static int inline DEFAULT_ACCEPT_TIMEOUT_SECONDS = 5;
-        constexpr static int inline DEFAULT_PENDING_CONNECTION_QUEUE_SIZE = 32;
-
-        void on_client_disconnected(std::size_t connector_index)
+        bool check_errors_during_send(std::size_t index, int send_result)
         {
-            m_asio_reader.remove_descriptor(m_connectors.get_socket_descriptor(connector_index));
-            m_connectors.remove_connector(connector_index);
-            // on_client_disconnected is supposed to be invoked always from derived classes
-            // therefore it is up to the derived class to call this method explicitly
+            bool ok_to_continue{true};
+
+            auto peer_socket = m_connectors[index]->socket();
+            auto error = Socket<SocketType::TCP>::get_current_thread_last_socket_error();
+
+            if (peer_socket->is_connection_lost_during_send(error))
+            {
+                on_client_disconnected(index);
+                ok_to_continue = false;
+            }
+            else
+            {
+                on_socket_error(error, send_result);
+            }
+
+            return ok_to_continue;
         }
-
-        ///////////////////////////////////////////////////////////////////////////////////
-        // CRTP STATICALLY-POLYMORPHIC METHODS
-        void on_client_connected(std::size_t connector_index)
-        {
-            derived_class_implementation().on_client_connected(connector_index);
-        }
-
-        void on_async_io_error(int error_code, int event_result)
-        {
-            derived_class_implementation().on_async_io_error(error_code, event_result);
-        }
-
-        void on_data_ready(std::size_t connector_index)
-        {
-            derived_class_implementation().on_data_ready(connector_index);
-        }
-        ///////////////////////////////////////////////////////////////////////////////////
-
-    private:
-        std::unique_ptr<std::thread> m_reactor_thread;
-        int m_accept_timeout_seconds = -1;
-        Socket<SocketType::TCP> m_acceptor_socket;
-        AsyncIOPollerType m_asio_reader;
-        std::atomic<bool> m_is_stopping = false;
-        UserspaceSpinlock<> m_lock;
-        TcpReactorImplementation& derived_class_implementation() { return *static_cast<TcpReactorImplementation*>(this); }
-
-    protected:
-        Connectors<Socket<SocketType::TCP>> m_connectors;
 };
 
-/* 
+/*
     CPR : Connection per request
 
     ITS PARSER ONLY HANDLES CONNECTION-PER-REQUEST MODEL WHERE THERE WILL BE ONE UNIQUE TCP CONNECTION PER HTTP REQUEST
-    THEREFORE THE PARSER DOES NOT CONSIDER INCOMPLETE BYTES 
-    
+    THEREFORE THE PARSER DOES NOT CONSIDER INCOMPLETE BYTES
+
     USE CASE :   IN SIMPLE HTTP APPS AJAX'S XMLHttpRequest FOR POST REQUEST , YOU CAN NOT REUSE AN EXISTING TCP CONNECTION
                  Https://stackoverflow.com/questions/32505128/how-to-make-xmlhttprequest-reuse-a-tcp-connection
 */
@@ -1757,13 +2257,13 @@ class HttpResponse
 };
 
 template <typename HTTPCPRReactorImplementation>
-class HTTPCPRReactor : public  TcpReactor<HTTPCPRReactor<HTTPCPRReactorImplementation>, Epoll<>>
+class HTTPCPRReactor : public  TcpReactor<HTTPCPRReactor<HTTPCPRReactorImplementation>, Epoll>
 {
 public:
 
     HTTPCPRReactor()
     {
-        m_cache.reserve(RECEIVE_SIZE);
+        m_cache.reserve(this->m_options.m_rx_buffer_capacity);
     }
 
     ~HTTPCPRReactor() {}
@@ -1774,37 +2274,19 @@ public:
 
     void on_data_ready(std::size_t peer_index)
     {
-        auto peer_socket = this->m_connectors.get_connector_socket(peer_index);
-        std::size_t received_bytes{ 0 };
+        auto read = this->receive(peer_index);
 
-        char read_buffer[RECEIVE_SIZE] = { 0 };
-        auto read = peer_socket->receive(read_buffer, RECEIVE_SIZE);
+        if (read > 0 && read <= this->m_options.m_rx_buffer_capacity)
+        {
+            for(std::size_t i =0; i< this->get_rx_buffer_size(peer_index);i++)
+            {
+                m_cache += (this->get_rx_buffer(peer_index)[i]);
+            }
 
-        if (read > 0 && read <= static_cast<int>(RECEIVE_SIZE))
-        {
-            received_bytes += read;
-            read_buffer[read] = '\0';
-            m_cache += read_buffer;
-        }
-        else 
-        {
-            auto error = Socket<>::get_current_thread_last_socket_error();
-            
-            if( read == 0)
-            {
-                on_client_disconnected(peer_index);
-            }
-            else if (peer_socket->is_connection_lost_during_receive(error))
-            {
-                on_client_disconnected(peer_index);
-            }           
-            else if (error != 0)
-            {
-                this->on_socket_error(error, read);
-            }
+            m_cache += '\0';
         }
 
-        if (received_bytes > 0)
+        if (read > 0)
         {
             std::array<HttpRequest, MAX_INCOMING_HTTP_REQUEST_COUNT> http_requests;
             std::size_t http_request_count = 0;
@@ -1819,16 +2301,16 @@ public:
                         assert(0 == 1); // INVALID BUFFER
                         break;
                     case HTTPVerb::GET:
-                        on_http_get_request(http_requests[i], peer_socket);
+                        on_http_get_request(http_requests[i], peer_index);
                         break;
                     case HTTPVerb::PUT:
-                        on_http_put_request(http_requests[i], peer_socket);
+                        on_http_put_request(http_requests[i], peer_index);
                         break;
                     case HTTPVerb::POST:
-                        on_http_post_request(http_requests[i], peer_socket);
+                        on_http_post_request(http_requests[i], peer_index);
                         break;
                     case HTTPVerb::DEL:
-                        on_http_delete_request(http_requests[i], peer_socket);
+                        on_http_delete_request(http_requests[i], peer_index);
                         break;
                     default:
                         break;
@@ -1837,53 +2319,52 @@ public:
             }
         }
 
-        on_client_disconnected(peer_index);
+        TcpReactor<HTTPCPRReactor<HTTPCPRReactorImplementation>, Epoll>::on_client_disconnected(peer_index);
     }
 
-    void on_http_get_request(const HttpRequest& http_request, Socket<SocketType::TCP>* connector_socket)
+    void on_http_get_request(const HttpRequest& http_request, std::size_t peer_index)
     {
-        static_cast<HTTPCPRReactorImplementation*>(this)->on_http_get_request(http_request, connector_socket);
+        static_cast<HTTPCPRReactorImplementation*>(this)->on_http_get_request(http_request, peer_index);
     }
 
-    void on_http_post_request(const HttpRequest& http_request, Socket<SocketType::TCP>* connector_socket)
+    void on_http_post_request(const HttpRequest& http_request, std::size_t peer_index)
     {
-        static_cast<HTTPCPRReactorImplementation*>(this)->on_http_post_request(http_request, connector_socket);
+        static_cast<HTTPCPRReactorImplementation*>(this)->on_http_post_request(http_request, peer_index);
     }
 
-    void on_http_put_request(const HttpRequest& http_request, Socket<SocketType::TCP>* connector_socket)
+    void on_http_put_request(const HttpRequest& http_request, std::size_t peer_index)
     {
-        static_cast<HTTPCPRReactorImplementation*>(this)->on_http_put_request(http_request, connector_socket);
+        static_cast<HTTPCPRReactorImplementation*>(this)->on_http_put_request(http_request, peer_index);
     }
 
-    void on_http_delete_request(const HttpRequest& http_request, Socket<SocketType::TCP>* connector_socket)
+    void on_http_delete_request(const HttpRequest& http_request, std::size_t peer_index)
     {
-        static_cast<HTTPCPRReactorImplementation*>(this)->on_http_delete_request(http_request, connector_socket);
+        static_cast<HTTPCPRReactorImplementation*>(this)->on_http_delete_request(http_request, peer_index);
     }
 
     void on_client_connected(std::size_t peer_index)
     {
-        UNUSED(peer_index);
+        MEMLIVE_UNUSED(peer_index);
     }
 
     void on_client_disconnected(std::size_t peer_index)
     {
-        TcpReactor<HTTPCPRReactor, Epoll<>>::on_client_disconnected(peer_index);
+        MEMLIVE_UNUSED(peer_index);
     }
 
     void on_async_io_error(int error_code, int event_result)
     {
-        UNUSED(error_code);
-        UNUSED(event_result);
+        MEMLIVE_UNUSED(error_code);
+        MEMLIVE_UNUSED(event_result);
     }
 
     void on_socket_error(int error_code, int event_result)
     {
-        UNUSED(error_code);
-        UNUSED(event_result);
+        MEMLIVE_UNUSED(error_code);
+        MEMLIVE_UNUSED(event_result);
     }
 
 private:
-    static inline constexpr std::size_t RECEIVE_SIZE = 4096;
     static inline constexpr std::size_t MAX_INCOMING_HTTP_REQUEST_COUNT = 32;
     std::string m_cache;
     std::size_t m_cache_index = 0;
@@ -2041,7 +2522,7 @@ class Profiler
 
         void capture_allocation(void* address, std::size_t size)
         {
-            UNUSED(address);
+            MEMLIVE_UNUSED(address);
 
             if(size == 0 ) return ;
 
@@ -2082,7 +2563,7 @@ class Profiler
 
             (*thread_local_stats).m_size_class_stats[index].add_deallocation();
         }
-        
+
         void capture_aligned_deallocation(void* address, std::size_t alignment)
         {
             if(address == nullptr) return;
@@ -2090,7 +2571,7 @@ class Profiler
             std::size_t original_allocation_size = 0;
 
             #ifdef __linux__
-            UNUSED(alignment);
+            MEMLIVE_UNUSED(alignment);
             original_allocation_size = static_cast<std::size_t>(malloc_usable_size(address));
             #elif _WIN32
             original_allocation_size = static_cast<std::size_t>(_aligned_msize(address, alignment, 0));
@@ -2108,7 +2589,7 @@ class Profiler
 
             (*thread_local_stats).m_size_class_stats[index].add_deallocation();
         }
-        
+
         void capture_custom_deallocation(void* address, std::size_t original_allocation_size)
         {
             if(address == nullptr) return;
@@ -2191,7 +2672,7 @@ class Profiler
         }
 };
 
-} // NAMESPACE END 
+} // NAMESPACE END
 
 /////////////////////////////////////////////////////////////
 // PROFILER PROXIES
@@ -2225,12 +2706,12 @@ inline void proxy_free(void* address)
 inline void proxy_aligned_free(void* address, std::size_t alignment)
 {
     memlive::Profiler::get_instance().capture_aligned_deallocation(address, alignment);
-    builtin_aligned_free(address);
+    memlive_builtin_aligned_free(address);
 }
 
 inline void* proxy_aligned_alloc(std::size_t size, std::size_t alignment)
 {
-    void * ret = builtin_aligned_alloc(size, alignment);
+    void * ret = memlive_builtin_aligned_alloc(size, alignment);
     memlive::Profiler::get_instance().capture_allocation(ret, size);
     return ret;
 }
@@ -2378,13 +2859,13 @@ void* operator new[](std::size_t size, std::size_t alignment)
 // WITH ALIGNMENT and std::nothrow_t
 void* operator new(std::size_t size, std::align_val_t alignment, const std::nothrow_t& tag) noexcept
 {
-    UNUSED(tag);
+    MEMLIVE_UNUSED(tag);
     return proxy_aligned_alloc(size, static_cast<std::size_t>(alignment));
 }
 
 void* operator new[](std::size_t size, std::align_val_t alignment, const std::nothrow_t& tag) noexcept
 {
-    UNUSED(tag);
+    MEMLIVE_UNUSED(tag);
     return proxy_aligned_alloc(size, static_cast<std::size_t>(alignment));
 }
 
@@ -2401,13 +2882,13 @@ void operator delete[](void* ptr, std::align_val_t alignment, const std::nothrow
 // WITH ALIGNMENT and std::nothrow_t & std::size_t alignment not std::align_val_t
 void* operator new(std::size_t size, std::size_t alignment, const std::nothrow_t& tag) noexcept
 {
-    UNUSED(tag);
+    MEMLIVE_UNUSED(tag);
     return proxy_aligned_alloc(size, alignment);
 }
 
 void* operator new[](std::size_t size, std::size_t alignment, const std::nothrow_t& tag) noexcept
 {
-    UNUSED(tag);
+    MEMLIVE_UNUSED(tag);
     return proxy_aligned_alloc(size, alignment);
 }
 
@@ -2424,37 +2905,37 @@ void operator delete[](void* ptr, std::size_t alignment, const std::nothrow_t &)
 // DELETES WITH SIZES
 void operator delete(void* ptr, std::size_t size) noexcept
 {
-    UNUSED(size);
+    MEMLIVE_UNUSED(size);
     proxy_free(ptr);
 }
 
 void operator delete[](void* ptr, std::size_t size) noexcept
 {
-    UNUSED(size);
+    MEMLIVE_UNUSED(size);
     proxy_free(ptr);
 }
 
 void operator delete(void* ptr, std::size_t size, std::align_val_t align) noexcept
 {
-    UNUSED(size);
+    MEMLIVE_UNUSED(size);
     proxy_aligned_free(ptr, static_cast<std::size_t>(align));
 }
 
 void operator delete[](void* ptr, std::size_t size, std::align_val_t align) noexcept
 {
-    UNUSED(size);
+    MEMLIVE_UNUSED(size);
     proxy_aligned_free(ptr, static_cast<std::size_t>(align));
 }
 
 void operator delete(void* ptr, std::size_t size, std::size_t align) noexcept
 {
-    UNUSED(size);
+    MEMLIVE_UNUSED(size);
     proxy_aligned_free(ptr, align);
 }
 
 void operator delete[](void* ptr, std::size_t size, std::size_t align) noexcept
 {
-    UNUSED(size);
+    MEMLIVE_UNUSED(size);
     proxy_aligned_free(ptr, align);
 }
 #endif
@@ -2491,9 +2972,9 @@ class HTTPLiveProfiler : public HTTPCPRReactor<HTTPLiveProfiler>
         HTTPLiveProfiler(HTTPLiveProfiler&& other) = delete;
         HTTPLiveProfiler& operator=(HTTPLiveProfiler&& other) = delete;
 
-        void on_http_get_request(const HttpRequest& http_request, Socket<SocketType::TCP>* connector_socket)
+        void on_http_get_request(const HttpRequest& http_request, std::size_t peer_index)
         {
-            UNUSED(http_request);
+            MEMLIVE_UNUSED(http_request);
 
             HttpResponse response;
             response.set_response_code_with_text("200 OK");
@@ -2502,12 +2983,12 @@ class HTTPLiveProfiler : public HTTPCPRReactor<HTTPLiveProfiler>
             response.set_body(HTTPLiveProfilerHtmlSource);
 
             auto response_text = response.get_as_text();
-            connector_socket->send(response_text.c_str(), response_text.length());
+            send(peer_index, response_text.c_str(), response_text.length());
         }
 
-        void on_http_post_request(const HttpRequest& http_request, Socket<SocketType::TCP>* connector_socket)
+        void on_http_post_request(const HttpRequest& http_request, std::size_t peer_index)
         {
-            UNUSED(http_request);
+            MEMLIVE_UNUSED(http_request);
 
             HttpResponse response;
             response.set_response_code_with_text("201 Created");
@@ -2517,19 +2998,19 @@ class HTTPLiveProfiler : public HTTPCPRReactor<HTTPLiveProfiler>
             response.set_body(m_post_response_buffer);
 
             auto response_text = response.get_as_text();
-            connector_socket->send(response_text.c_str(), response_text.length());
+            send(peer_index, response_text.c_str(), response_text.length());
         }
 
-        void on_http_put_request(const HttpRequest& http_request, Socket<SocketType::TCP>* connector_socket)
+        void on_http_put_request(const HttpRequest& http_request, std::size_t peer_index)
         {
-            UNUSED(http_request);
-            UNUSED(connector_socket);
+            MEMLIVE_UNUSED(http_request);
+            MEMLIVE_UNUSED(peer_index);
         }
 
-        void on_http_delete_request(const HttpRequest& http_request, Socket<SocketType::TCP>* connector_socket)
+        void on_http_delete_request(const HttpRequest& http_request, std::size_t peer_index)
         {
-            UNUSED(http_request);
-            UNUSED(connector_socket);
+            MEMLIVE_UNUSED(http_request);
+            MEMLIVE_UNUSED(peer_index);
         }
 
     private:
@@ -2567,7 +3048,12 @@ static HTTPLiveProfiler g_http_live_profiler;
 
 inline bool start(const std::string& address, int port)
 {
-    return g_http_live_profiler.start(address, port); // Reactor will start its own thread
+    TCPReactorOptions options;
+    options.m_nic_interface_ip = address;
+    options.m_port = port;
+    g_http_live_profiler.set_params(options);
+
+    return g_http_live_profiler.start(); // Reactor will start its own thread
 }
 
 inline void stop()

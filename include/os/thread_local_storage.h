@@ -2,8 +2,7 @@
     Standard C++ thread_local keyword does not allow you to specify thread specific destructors
     and also can't be applied to class members
 */
-#ifndef _THREAD_LOCAL_STORAGE_H_
-#define _THREAD_LOCAL_STORAGE_H_
+#pragma once
 
 #include <cstdint>
 
@@ -85,5 +84,3 @@ class ThreadLocalStorage
             ThreadLocalStorage(ThreadLocalStorage&& other) = delete;
             ThreadLocalStorage& operator=(ThreadLocalStorage&& other) = delete;
 };
-
-#endif
